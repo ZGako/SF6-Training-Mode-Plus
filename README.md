@@ -37,6 +37,7 @@ REframework mod for SF6 to expand the training mode functionality
     - [ ] Exporting menu allows for recording selection for set export - Allow for naming of files
     - [ ] Importing menu allows to also only importing single recordings of sets (they'll be separate files anyways)
 #### Maybe if doable
+- [ ] Implement history for REframework UI
 - [ ] Export and Import Save States (as they are ingame) - If not possible, implement fake save states
 - [ ] Export save state from recording (might even be better to make it a fake savestate so you can use it as a basis for a randomizer drill)
 - [ ] Mod the ingame UI and implement everything/partially there

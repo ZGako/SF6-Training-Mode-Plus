@@ -1,5 +1,11 @@
 -- Training Mode Plus - TMPlus
 
+-- intellinsense
+local re = re
+local sdk = sdk
+local reframework = reframework 
+local imgui = imgui
+
 -- getting the TrainingManager singleton also helps for determining SF6 initialization
 local TrainingManager = nil
 local TrainingStateChange = false
@@ -23,15 +29,17 @@ re.on_frame(function ()
 
     -- if we reach this point then we have the training manager
     -- we can now check if we are in training mode
-    if TrainingManager._TrainingState == 1 then 
+    if TrainingManager._TrainingState ~= 0 then 
 
         -- look if the state just changed from not being in training mode to reaching training mode
         if not TrainingStateChange then
+            TrainingStateChange = true
+
             -- module data initialization
             for _, module in ipairs(tmplus_modules) do
                 module.init()
             end
-            TrainingStateChange = true
+            
         end
 
         -- modules on frame calls
@@ -43,16 +51,16 @@ re.on_frame(function ()
         if ShowScriptUI and reframework:is_drawing_ui() then
             if imgui.begin_window("Training Mode Plus", true, 0) then
 
+                imgui.spacing()
+
                 if imgui.button("Refresh Training Mode") then
                     TrainingManager._IsReqRefresh = true
                 end
 
-                imgui.spacing()
-
                 -- modules UI
                 for _, module in ipairs(tmplus_modules) do
-                    imgui.spacing()
                     module.draw_ui()
+                    imgui.spacing()
                 end
 
                 imgui.end_window()
@@ -78,9 +86,9 @@ re.on_draw_ui(function ()
             ShowScriptUI = not ShowScriptUI
         end
 
-        if imgui.tree_node("Modules loaded...") then
+        if imgui.tree_node("Modules loaded") then
             for _, module in ipairs(tmplus_modules) do
-                imgui.colored_text(module.name, 0xFFAAFFFF)
+                imgui.text_colored(module.name, 0xFFAAFFFF)
                 imgui.same_line()
                 imgui.text(module.description)
             end

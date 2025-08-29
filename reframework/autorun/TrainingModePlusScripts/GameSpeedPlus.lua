@@ -1,3 +1,9 @@
+-- intellinsense
+local re = re
+local sdk = sdk
+local reframework = reframework 
+local imgui = imgui
+
 local module = {}
 
 module.name = "Game Speed Plus"
@@ -12,20 +18,19 @@ function module.init()
     local TrainingManager = sdk.get_managed_singleton("app.training.TrainingManager")
     module.data.TrainingData = TrainingManager:get_field("_tData")
     module.data.OtherSetting = module.data.TrainingData:get_field("OtherSetting")
+    module.data.tf_OS = TrainingManager._tfFuncs._entries[10]:get_field("value")
 
     -- *** Important fields I need from each ***
     -- TrainingData -> _IsReqRefresh - needed to check for refresh
     -- OtherSetting -> OS_Game_Speed - game speed enum (0 to 10)
     -- OtherSetting -> Is_Speed_Setting - boolean for enabling different speeds
-    -- OtherSetting -> ApplyGameSpeed()
-    -- trainingmanager -> _tfFuncs -> _entries[10].value = tf_OtherSetting -> call "ApplyGameSpeed()"
-    -- training._tfFuncs._entries[10].value
-    -- tf_OtherSetting.FuncData -> call "SetGameSpeed"
+    -- tf_OS -> ApplyGameSpeed() - function to apply the game speed
 
-    -- Init UI data variables
+
+    -- *** Init UI data variables ***
 
     -- this variable exists to deal with someone using the ingame menu and this one at the same time
-    module.ui.changed_speed = false
+    module.ui.speed_changed_by_script = false
 
     if module.data.OtherSetting.Is_Speed_Setting then
         module.ui.speed = 1 -- game default of 50%
@@ -33,29 +38,37 @@ function module.init()
         module.ui.speed = 6 -- default to 100% speed if not changed
     end
 
+    -- Setup Hooks
+
+    sdk.hook(sdk.find_type_definition("app.training.tf_OtherSetting.FuncData"):get_method("SetGameSpeed(app.training.GameSpeed)"), function (args)
+        local ingame_new_speed = sdk.to_int64(args[3])
+        -- if the new speed is not 100%
+        if ingame_new_speed ~= 5 and module.ui.speed ~= 6 then
+            return sdk.PreHookResult.SKIP_ORIGINAL
+        else
+            module.ui.speed = ingame_new_speed + 1
+        end
+    end)
+
 end
 
 function module.on_frame()
 
-    if module.ui.changed_speed then
-        re.msg("Speed selected: " .. module.ui.speed)
+    if module.ui.speed_changed_by_script then
+
+        module.ui.speed_changed_by_script = false
+
+        -- if the game is 100%, disable the boolean (that way it doesn't mess as much with the ingame UI)
         if module.ui.speed ~= 6 then
-            module.data.OtherSetting.OS_Game_Speed = module.ui.speed - 1
             module.data.OtherSetting.Is_Speed_Setting = true
         else
             module.data.OtherSetting.Is_Speed_Setting = false
         end
-        module.ui.changed_speed = false
-    end
 
-    if module.data.TrainingData._IsReqRefresh then
+        -- set the game speed based on the UI value
+        module.data.OtherSetting.OS_Game_Speed = module.ui.speed - 1
 
-        -- update UI if using the ingame menu
-        if module.data.OtherSetting.Is_Speed_Setting then
-            module.ui.speed = module.data.OtherSetting.OS_Game_Speed + 1
-        else
-            module.ui.speed = 6 -- game default of 100%
-        end
+        sdk.call_object_func(module.data.tf_OS, "ApplyGameSpeed")
     end
 end
 
@@ -63,12 +76,17 @@ function module.draw_ui()
 
     if imgui.collapsing_header("Game Speed Plus") then
 
-        module.ui.changed_speed, module.ui.speed = imgui.combo("Game Speed", module.ui.speed,
+        module.ui.speed_changed_by_script, module.ui.speed = imgui.combo("Game Speed", module.ui.speed,
         {"50%", "60%", "70%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"})
 
-        imgui.text("Note: Remember to refresh the training mode to apply the new settings.")
-        imgui.text("Note: You can reset to standard speed both through the ingame menu and the script")
-        imgui.text("Note: Try avoiding changing these settings with the ingame menu open on the 'Environment' tab.")
+        imgui.same_line()
+
+        if imgui.button("Reset to Standard") then
+            module.ui.speed_changed_by_script = true
+            module.ui.speed = 6
+        end
+
+        imgui.text("Note: You can use both the script menu and the ingame menu. Latest change takes precedence.")
 
     end
 
