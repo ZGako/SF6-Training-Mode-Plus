@@ -3,7 +3,7 @@ REframework mod for SF6 to expand the training mode functionality
 
 ## Features and notes
 #### Short term goals
-- [ ] Game Speed - Allow control ranging from 50% to 150% at 10% increments.
+- [x] Game Speed - Allow control ranging from 50% to 150% at 10% increments.
 - [ ] Alter Training Mode refresh parameters (these persist through refreshes, also gauge settings are compatible with fixed and refill unless stated otherwise)
     - [ ] Advanced Health - Allow unit control (compared to default training mode allowing only % increments, equivalent to 100 units). NOT COMPATIBLE WITH REFILL AND FIXED gauge setting
     - [ ] Drive - Allow control at 0.1 drive bar increments

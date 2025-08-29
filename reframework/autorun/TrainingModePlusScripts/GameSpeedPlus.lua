@@ -21,7 +21,6 @@ function module.init()
     module.data.tf_OS = TrainingManager._tfFuncs._entries[10]:get_field("value")
 
     -- *** Important fields I need from each ***
-    -- TrainingData -> _IsReqRefresh - needed to check for refresh
     -- OtherSetting -> OS_Game_Speed - game speed enum (0 to 10)
     -- OtherSetting -> Is_Speed_Setting - boolean for enabling different speeds
     -- tf_OS -> ApplyGameSpeed() - function to apply the game speed
@@ -89,7 +88,6 @@ function module.draw_ui()
         imgui.text("Note: You can use both the script menu and the ingame menu. Latest change takes precedence.")
 
     end
-
 end
 
 return module
