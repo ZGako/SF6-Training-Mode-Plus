@@ -16,8 +16,8 @@ function module.init()
 
     -- get the important fields at init time
     local TrainingManager = sdk.get_managed_singleton("app.training.TrainingManager")
-    module.data.TrainingData = TrainingManager:get_field("_tData")
-    module.data.OtherSetting = module.data.TrainingData:get_field("OtherSetting")
+    local TrainingData = TrainingManager:get_field("_tData")
+    module.data.OtherSetting = TrainingData:get_field("OtherSetting")
     module.data.tf_OS = TrainingManager._tfFuncs._entries[10]:get_field("value")
 
     -- *** Important fields I need from each ***

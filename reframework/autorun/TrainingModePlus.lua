@@ -13,7 +13,8 @@ local ShowScriptUI = true
 
 -- require modules here
 local tmplus_modules = {
-    require("TrainingModePlusScripts/GameSpeedPlus")
+    require("TrainingModePlusScripts/GameSpeedPlus"),
+    require("TrainingModePlusScripts/TrainingParametersPlus")
 }
 
 re.on_frame(function ()
@@ -60,7 +61,6 @@ re.on_frame(function ()
                 -- modules UI
                 for _, module in ipairs(tmplus_modules) do
                     module.draw_ui()
-                    imgui.spacing()
                 end
 
                 imgui.end_window()
