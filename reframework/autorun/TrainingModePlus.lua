@@ -12,10 +12,27 @@ local TrainingStateChange = false
 local ShowScriptUI = true
 
 -- require modules here
-local tmplus_modules = {
-    require("TrainingModePlusScripts/GameSpeedPlus"),
-    require("TrainingModePlusScripts/TrainingParametersPlus")
-}
+-- Safely require modules so a broken module won't crash the entire script.
+local tmplus_modules = {}
+local function safe_require(path)
+    local ok, mod_or_err = pcall(require, path)
+    if not ok then
+        print(string.format("[TrainingModePlus] require('%s') failed: %s", path, tostring(mod_or_err)))
+        return nil
+    end
+    if type(mod_or_err) ~= "table" then
+        print(string.format("[TrainingModePlus] module '%s' did not return a table (got %s)", path, type(mod_or_err)))
+        return nil
+    end
+    return mod_or_err
+end
+
+do
+    local mod = safe_require("TrainingModePlusScripts/GameSpeedPlus")
+    if mod then table.insert(tmplus_modules, mod) end
+    local mod2 = safe_require("TrainingModePlusScripts/TrainingParametersPlus")
+    if mod2 then table.insert(tmplus_modules, mod2) end
+end
 
 re.on_frame(function ()
     if not TrainingManager then
@@ -36,16 +53,34 @@ re.on_frame(function ()
         if not TrainingStateChange then
             TrainingStateChange = true
 
-            -- module data initialization
+            -- module data initialization (guard nil functions and log helpful messages)
             for _, module in ipairs(tmplus_modules) do
-                module.init()
+                if module == nil then
+                    print("[TrainingModePlus] encountered nil module in tmplus_modules")
+                else
+                    if type(module.init) == "function" then
+                        module.init()
+                    else
+                        print(string.format("[TrainingModePlus] module '%s' has no init() function", tostring(module.name)))
+                    end
+                end
             end
             
         end
 
-        -- modules on frame calls
+        -- modules on frame calls (guard nil functions)
         for _, module in ipairs(tmplus_modules) do
-            module.on_frame()
+            if module == nil then
+                -- skip
+            else
+                if type(module.on_frame) == "function" then
+                    module.on_frame()
+                else
+                    -- Only warn once to avoid spamming; print minimal info
+                    -- This print will help identify which module lost its on_frame
+                    print(string.format("[TrainingModePlus] module '%s' has no on_frame() function", tostring(module.name)))
+                end
+            end
         end
 
 
@@ -58,9 +93,15 @@ re.on_frame(function ()
                     TrainingManager._IsReqRefresh = true
                 end
 
-                -- modules UI
+                -- modules UI (guard nil functions)
                 for _, module in ipairs(tmplus_modules) do
-                    module.draw_ui()
+                    if module and type(module.draw_ui) == "function" then
+                        module.draw_ui()
+                    else
+                        if module then
+                            print(string.format("[TrainingModePlus] module '%s' has no draw_ui() function", tostring(module.name)))
+                        end
+                    end
                 end
 
                 imgui.end_window()
