@@ -6,58 +6,97 @@ local imgui = imgui
 
 local module = {}
 
--- temporary
-local changed = false
-
 module.name = "Training Parameters Plus"
 module.description = "Module for adjusting training mode parameters. Modifiable parameters include: Health, Drive, Super, Position, Distance, Unique Resources"
 
 module.data = {}
-module.ui = {
-    p1 = {
-        health = {},
-        drive = {}
-    },
-    p2 = {
-        health = {},
-        drive = {}
-    },
-}
+module.ui = {}
 
-module.health_presets = {
-    refill = {
-        Is_Vital_Recovery_Timer = true,
-        Is_Vital_Infinity = false,
-        Is_Vital_No_Recovery = false,
-        Is_KO = false,
-        Is_Point_Lock = true
-    },
-    fixed = {
-        Is_Vital_Recovery_Timer = false,
-        Is_Vital_Infinity = true,
-        Is_Vital_No_Recovery = true,
-        Is_KO = false,
-        Is_Point_Lock = true
-    },
-    standard = {
-        Is_Vital_Recovery_Timer = false,
-        Is_Vital_Infinity = false,
-        Is_Vital_No_Recovery = true,
-        Is_KO = true,
-        Is_Point_Lock = false
-    }
-}
+function module.ui.init(playerUI, playerParam)
 
-module.drive_presets = {
-    stock = {
-        DG_Type = 1,
-        Is_DG_Point_Lock = false,
-    },
-    point = {
-        DG_Type = 3,
-        Is_DG_Point_Lock = true,
-    }
-}
+    -- init health ui data
+    playerUI.health = {}
+    -- set the health percentage to the player's vital point
+    playerUI.health.percentage = playerParam.Vital_Point
+    -- changed for percentage slider change
+    playerUI.health.percentage_changed = false
+
+    -- init drive ui data
+    playerUI.drive = {}
+
+    -- stock drive bars
+    -- checks if the drive type is stock or points
+    playerUI.drive.type_stock = true
+    -- boolean variable for type change
+    playerUI.drive.type_changed = false
+
+    -- stock values
+    playerUI.drive.drive_stocks = playerParam.DG_Stock
+    -- changed for drive stocks slider change
+    playerUI.drive.drive_stocks_changed = false
+
+    -- points values
+    -- checkbox for enabling the precise drive points adjustment
+    playerUI.drive.type_points_enabled = false
+    -- changed for drive type change
+    playerUI.drive.type_points_enabled_changed = false
+
+    -- set the drive points to the player's drive gauge points
+    playerUI.drive.points = playerParam.DG_Point
+    -- changed for drive points slider change
+    playerUI.drive.points_changed = false
+
+    -- burnout checkbox
+    playerUI.drive.burnout = false
+    playerUI.drive.burnout_changed = false
+
+    playerUI.super = {}
+end
+
+function module.ui.update(playerUI, playerParam)
+
+    local need_update = false
+
+    -- update health ui data
+    if playerUI.health.percentage_changed then
+        playerParam.Vital_Point = playerUI.health.percentage
+        need_update = true
+    end
+
+    -- update drive ui data
+
+    -- update drive type
+    if playerUI.drive.type_changed then
+        if playerUI.drive.type_stock then
+            playerParam.DG_Type = 1
+        else
+            playerParam.DG_Type = 3
+            playerParam.Is_DG_Point_Lock = true
+        end
+        need_update = true
+    end
+
+    -- update drive stocks
+    if playerUI.drive.drive_stocks_changed then
+        playerParam.DG_Stock = playerUI.drive.drive_stocks
+        need_update = true
+    end
+
+    -- update drive points
+    if playerUI.drive.points_changed then
+        playerParam.DG_Point = playerUI.drive.points
+        need_update = true
+    end
+
+    -- update burnout
+    if playerUI.drive.burnout_changed then
+        playerParam.Is_DG_Break = playerUI.drive.burnout
+        need_update = true
+    end
+
+
+    return need_update
+end
 
 function module.init()
     
@@ -74,297 +113,21 @@ function module.init()
     module.data.live_P1 = cPlayer[0]
     module.data.live_P2 = cPlayer[1]
 
-    -- *** Important fields I need from each ***
-
-
-    -- TrainingManager._tfFuncs._entries[6]:get_field("value")
-    -- sdk.call_object_func(param, "bApply") - this is for applying the changes immediately
-
-    -- initialize UI variables
-    -- p1
-
-    --HP
-    module.ui.p1.health.health_per = module.data.P1Param.Vital_Point
-    module.ui.p1.health.health_per_changed = false
-    module.ui.p1.health.health_points = math.ceil(module.ui.p1.health.health_per / 100 * module.data.live_P1.vital_max)
-    module.ui.p1.health.health_points_changed = false
-    module.ui.p1.health.checkbox_value = true
-    module.ui.p1.health.checkbox_changed = false
-    module.ui.p1.health.queue_hp_update = false
-    -- set the preset for storage and restoring later
-    if module.data.P1Param.Is_Vital_Recovery_Timer == true then
-        module.ui.p1.health.old_preset = module.health_presets.refill
-    elseif module.data.P1Param.Is_Vital_Infinity == true then
-        module.ui.p1.health.old_preset = module.health_presets.fixed
-    elseif module.data.P1Param.Is_KO == true then
-        module.ui.p1.health.old_preset = module.health_presets.standard
-    end
-    -- DRIVE
-    module.ui.p1.drive.drive_points = module.data.P1Param.DG_Point
-    module.ui.p1.drive.drive_points_changed = false
-    module.ui.p1.drive.drive_stocks = module.data.P1Param.DG_Stock
-    module.ui.p1.drive.drive_stocks_changed = false
-    module.ui.p1.drive.drive_burnout = module.data.P1Param.Is_DG_Break
-    module.ui.p1.drive.drive_burnout_changed = false
-    module.ui.p1.drive.checkbox_value = true
-    module.ui.p1.drive.checkbox_changed = false
-
-
-
-    -- p2
-
-    -- HP
-    module.ui.p2.health.health_per = module.data.P2Param.Vital_Point
-    module.ui.p2.health.health_per_changed = false
-    module.ui.p2.health.health_points = math.ceil(module.ui.p2.health.health_per / 100 * module.data.live_P2.vital_max)
-    module.ui.p2.health.health_points_changed = false
-    module.ui.p2.health.checkbox_value = true
-    module.ui.p2.health.checkbox_changed = false
-    module.ui.p2.health.queue_hp_update = false
-    -- set the preset for storage and restoring later
-    if module.data.P2Param.Is_Vital_Recovery_Timer == true then
-        module.ui.p2.health.old_preset = module.health_presets.refill
-    elseif module.data.P2Param.Is_Vital_Infinity == true then
-        module.ui.p2.health.old_preset = module.health_presets.fixed
-    elseif module.data.P2Param.Is_KO == true then
-        module.ui.p2.health.old_preset = module.health_presets.standard
-    end
-
-    -- DRIVE
-    module.ui.p2.drive.drive_points = module.data.P2Param.DG_Point
-    module.ui.p2.drive.drive_points_changed = false
-    module.ui.p2.drive.drive_stocks = module.data.P2Param.DG_Stock
-    module.ui.p2.drive.drive_stocks_changed = false
-    module.ui.p2.drive.drive_burnout = module.data.P2Param.Is_DG_Break
-    module.ui.p2.drive.drive_burnout_changed = false
-    module.ui.p2.drive.checkbox_value = true
-    module.ui.p2.drive.checkbox_changed = false
-
-    
+    -- initialize ui data
+    module.ui.p1 = {}
+    module.ui.p2 = {}
+    module.ui.init(module.ui.p1, module.data.P1Param)
+    module.ui.init(module.ui.p2, module.data.P2Param)
 
 end
 
 function module.on_frame()
-    
-    -- variable indicating a request to call bApply at the end of the function
-    local need_update = false
+    -- update live data references
 
-    -- if the percentage values change, update the training setting and apply it
-    if module.ui.p1.health.health_per_changed == true then
-        module.data.P1Param.Vital_Point = module.ui.p1.health.health_per
+    need_update = false
 
-        -- update the points to keep them coupled
-        if module.ui.p1.health.health_per ~= 0 then
-            module.ui.p1.health.health_points = math.ceil(module.ui.p1.health.health_per / 100 * module.data.live_P1.vital_max)
-        else 
-            module.ui.p1.health.health_points = 1
-        end
-
-        need_update = true
-    end
-
-    if module.ui.p2.health.health_per_changed == true then
-        module.data.P2Param.Vital_Point = module.ui.p2.health.health_per
-
-        -- update the points to keep them coupled
-        if module.ui.p2.health.health_per ~= 0 then
-            module.ui.p2.health.health_points = math.ceil(module.ui.p2.health.health_per / 100 * module.data.live_P2.vital_max)
-        else 
-            module.ui.p2.health.health_points = 1
-        end
-
-        need_update = true
-    end
-
-    -- if health point value changes, update the live value, and set the stuff for proper calculation on refresh
-    if module.ui.p1.health.health_points_changed == true then
-        -- set the coupled health percentage value
-        module.ui.p1.health.health_per = math.floor(module.ui.p1.health.health_points / module.data.live_P1.vital_max * 100)
-        module.data.P1Param.Vital_Point = module.ui.p1.health.health_per
-
-        module.data.live_P1.heal_new = module.ui.p1.health.health_points
-        module.data.live_P1.vital_new = module.ui.p1.health.health_points
-
-        -- change the recovery option to standard
-        module.data.P1Param.Is_Vital_Recovery_Timer = module.health_presets.standard.Is_Vital_Recovery_Timer
-        module.data.P1Param.Is_Vital_Infinity = module.health_presets.standard.Is_Vital_Infinity
-        module.data.P1Param.Is_Vital_No_Recovery = module.health_presets.standard.Is_Vital_No_Recovery
-        module.data.P1Param.Is_KO = module.health_presets.standard.Is_KO
-        module.data.P1Param.Is_Point_Lock = module.health_presets.standard.Is_Point_Lock
-
-        need_update = true
-
-    end
-
-    if module.ui.p2.health.health_points_changed == true then
-        -- set the coupled health percentage value
-        module.ui.p2.health.health_per = math.floor(module.ui.p2.health.health_points / module.data.live_P2.vital_max * 100)
-        module.data.P2Param.Vital_Point = module.ui.p2.health.health_per
-
-        module.data.live_P2.heal_new = module.ui.p2.health.health_points
-        module.data.live_P2.vital_new = module.ui.p2.health.health_points
-
-        -- change the recovery option to standard
-        module.data.P2Param.Is_Vital_Recovery_Timer = module.health_presets.standard.Is_Vital_Recovery_Timer
-        module.data.P2Param.Is_Vital_Infinity = module.health_presets.standard.Is_Vital_Infinity
-        module.data.P2Param.Is_Vital_No_Recovery = module.health_presets.standard.Is_Vital_No_Recovery
-        module.data.P2Param.Is_KO = module.health_presets.standard.Is_KO
-        module.data.P2Param.Is_Point_Lock = module.health_presets.standard.Is_Point_Lock
-
-        need_update = true
-
-    end
-
-    -- if the checkbox changes and is enabled (which means it's back to percentage setting), restore the previous value
-    if module.ui.p1.health.checkbox_changed == true then
-        if module.ui.p1.health.checkbox_value == true then
-            -- restore the recovery option to the old one
-            module.data.P1Param.Is_Vital_Recovery_Timer = module.ui.p1.health.old_preset.Is_Vital_Recovery_Timer
-            module.data.P1Param.Is_Vital_Infinity = module.ui.p1.health.old_preset.Is_Vital_Infinity
-            module.data.P1Param.Is_Vital_No_Recovery = module.ui.p1.health.old_preset.Is_Vital_No_Recovery
-            module.data.P1Param.Is_KO = module.ui.p1.health.old_preset.Is_KO
-            module.data.P1Param.Is_Point_Lock = module.ui.p1.health.old_preset.Is_Point_Lock
-        else
-            -- set the preset for storage and restoring later
-            if module.data.P1Param.Is_Vital_Recovery_Timer == true then
-                module.ui.p1.health.old_preset = module.health_presets.refill
-            elseif module.data.P1Param.Is_Vital_Infinity == true then
-                module.ui.p1.health.old_preset = module.health_presets.fixed
-            elseif module.data.P1Param.Is_KO == true then
-                module.ui.p1.health.old_preset = module.health_presets.standard
-            end
-        end
-
-        need_update = true
-    end
-
-    if module.ui.p2.health.checkbox_changed == true and module.ui.p2.health.checkbox_value == true then
-        if module.ui.p2.health.checkbox_value == true then
-            -- restore the recovery option to the old one
-            module.data.P2Param.Is_Vital_Recovery_Timer = module.ui.p2.health.old_preset.Is_Vital_Recovery_Timer
-            module.data.P2Param.Is_Vital_Infinity = module.ui.p2.health.old_preset.Is_Vital_Infinity
-            module.data.P2Param.Is_Vital_No_Recovery = module.ui.p2.health.old_preset.Is_Vital_No_Recovery
-            module.data.P2Param.Is_KO = module.ui.p2.health.old_preset.Is_KO
-            module.data.P2Param.Is_Point_Lock = module.ui.p2.health.old_preset.Is_Point_Lock
-        else
-            -- set the preset for storage and restoring later
-            if module.data.P2Param.Is_Vital_Recovery_Timer == true then
-                module.ui.p2.health.old_preset = module.health_presets.refill
-            elseif module.data.P2Param.Is_Vital_Infinity == true then
-                module.ui.p2.health.old_preset = module.health_presets.fixed
-            elseif module.data.P2Param.Is_KO == true then
-                module.ui.p2.health.old_preset = module.health_presets.standard
-            end
-        end
-
-        need_update = true
-    end
-
-    -- update the health value after the refresh happens (prolly doesn't work but whatever)
-    if module.ui.p1.health.queue_hp_update == true and module.data.TrainingManager._TrainingState == 1 then
-        module.ui.p1.health.queue_hp_update = false
-        module.data.live_P1.heal_new = module.ui.p1.health.health_points
-        module.data.live_P1.vital_new = module.ui.p1.health.health_points
-    end
-
-    if module.ui.p2.health.queue_hp_update == true and module.data.TrainingManager._TrainingState == 2 then
-        module.ui.p2.health.queue_hp_update = false
-        module.data.live_P2.heal_new = module.ui.p2.health.health_points
-        module.data.live_P2.vital_new = module.ui.p2.health.health_points
-    end
-
-    -- DRIVE UPDATES
-    if module.ui.p1.drive.checkbox_changed == true then
-        if module.ui.p1.drive.checkbox_value == true then
-            -- switch to stocks
-            module.data.P1Param.DG_Type = module.drive_presets.stock.DG_Type
-            module.data.P1Param.Is_DG_Point_Lock = module.drive_presets.stock.Is_DG_Point_Lock
-            module.data.P1Param.DG_Stock = module.ui.p1.drive.drive_stocks
-        else
-            -- switch to points
-            module.data.P1Param.DG_Type = module.drive_presets.point.DG_Type
-            module.data.P1Param.Is_DG_Point_Lock = module.drive_presets.point.Is_DG_Point_Lock
-            module.data.P1Param.DG_Point = module.ui.p1.drive.drive_points
-        end
-        need_update = true
-    end
-
-    if module.ui.p1.drive.drive_points_changed == true then
-        module.data.P1Param.DG_Point = module.ui.p1.drive.drive_points
-
-        -- update the stocks to keep them coupled
-        if module.ui.p1.drive.drive_points ~= 0 then
-            module.ui.p1.drive.drive_stocks = math.ceil(module.ui.p1.drive.drive_points / 10000)
-        else
-            module.ui.p1.drive.drive_stocks = 0
-        end
-
-        need_update = true
-    end
-
-    if module.ui.p1.drive.drive_stocks_changed == true then
-        module.data.P1Param.DG_Stock = module.ui.p1.drive.drive_stocks
-
-        -- update the points to keep them coupled
-        module.ui.p1.drive.drive_points = module.ui.p1.drive.drive_stocks * 10000
-        need_update = true
-    end
-
-    if module.ui.p1.drive.drive_burnout_changed == true then
-        module.data.P1Param.Is_DG_Break = module.ui.p1.drive.drive_burnout
-        need_update = true
-    end
-
-    -- P2 DRIVE UPDATES
-    if module.ui.p2.drive.checkbox_changed == true then
-        if module.ui.p2.drive.checkbox_value == true then
-            -- switch to stocks
-            module.data.P2Param.DG_Type = module.drive_presets.stock.DG_Type
-            module.data.P2Param.Is_DG_Point_Lock = module.drive_presets.stock.Is_DG_Point_Lock
-            module.data.P2Param.DG_Stock = module.ui.p2.drive.drive_stocks
-        else
-            -- switch to points
-            module.data.P2Param.DG_Type = module.drive_presets.point.DG_Type
-            module.data.P2Param.Is_DG_Point_Lock = module.drive_presets.point.Is_DG_Point_Lock
-            module.data.P2Param.DG_Point = module.ui.p2.drive.drive_points
-        end
-        need_update = true
-    end
-
-    if module.ui.p2.drive.drive_points_changed == true then
-        module.data.P2Param.DG_Point = module.ui.p2.drive.drive_points
-        -- update the stocks to keep them coupled
-        if module.ui.p2.drive.drive_points ~= 0 then
-            module.ui.p2.drive.drive_stocks = math.ceil(module.ui.p2.drive.drive_points / 10000)
-        else
-            module.ui.p2.drive.drive_stocks = 0
-        end
-        need_update = true
-    end
-
-    if module.ui.p2.drive.drive_stocks_changed == true then
-        module.data.P2Param.DG_Stock = module.ui.p2.drive.drive_stocks
-        -- update the points to keep them coupled
-        module.ui.p2.drive.drive_points = module.ui.p2.drive.drive_stocks * 10000
-        need_update = true
-    end
-
-    if module.ui.p2.drive.drive_burnout_changed == true then
-        module.data.P2Param.Is_DG_Break = module.ui.p2.drive.drive_burnout
-        need_update = true
-    end
-
-    -- is request refresh?
-    if module.data.TrainingManager._IsReqRefresh then
-        -- if we're using health points
-        if not module.ui.p1.health.checkbox_value then
-            module.ui.p1.health.queue_hp_update = true
-        end
-
-        if not module.ui.p2.health.checkbox_value then
-            module.ui.p2.health.queue_hp_update = true
-        end
-    end
+    need_update = need_update or module.ui.update(module.ui.p1, module.data.P1Param)
+    need_update = need_update or module.ui.update(module.ui.p2, module.data.P2Param)
 
     -- updates the training mode immediately rather than waiting for refresh or whatever
     if need_update then
@@ -373,61 +136,49 @@ function module.on_frame()
 
 end
 
+-- UI rendering helpers
+function module.ui.draw_drive(playerUI, playerLabel, playerParam)
+    -- Drive
+    type_value = playerParam.DG_Type == 1
+    playerUI.drive.type_changed, playerUI.drive.type_stock = imgui.checkbox(playerLabel .. " Drive Stock", type_value)
+    
+    if playerUI.drive.type_stock then 
+        playerUI.drive.drive_stocks_changed, playerUI.drive.drive_stocks = imgui.slider_int(playerLabel .. " Drive Stocks", playerParam.DG_Stock, 0, 6)
+    else
+        playerUI.drive.type_points_enabled_changed, playerUI.drive.type_points_enabled = imgui.checkbox(playerLabel .. " Enable pointwise adjustment", playerUI.drive.type_points_enabled)
+        
+        if playerUI.drive.type_points_enabled then
+            playerUI.drive.points_changed, playerUI.drive.points = imgui.drag_int(playerLabel .. " Drive Points", playerParam.DG_Point, 1, 0, 60000)
+        else
+            points_increments = 0
+            current_points = playerParam.DG_Point / 10000
+            playerUI.drive.points_changed, points_increments = imgui.slider_float(playerLabel .. " Drive Points (stock increments of 10%)", current_points, 0, 6, "%.1f")
+            -- convert to points
+            playerUI.drive.points = math.floor(points_increments * 10000)
+        end
+    end
+    playerUI.drive.burnout_changed, playerUI.drive.burnout = imgui.checkbox(playerLabel .. " Burnout", playerParam.Is_DG_Break)
+end
+
+-- UI rendering function
 function module.draw_ui()
-
-    if imgui.collapsing_header("Training Parameters Plus") then
-        -- ALL STILL TODO, JUST A VISUAL PREVIEW
+    if imgui.collapsing_header("Training Parameters") then
+        -- Health
         if imgui.tree_node("Health") then
-
-            if module.ui.p1.health.checkbox_value then
-                module.ui.p1.health.health_per_changed, module.ui.p1.health.health_per = imgui.slider_int("P1 Health Percentage", module.ui.p1.health.health_per, 0, 100)
-            else
-                module.ui.p1.health.health_points_changed, module.ui.p1.health.health_points = imgui.drag_int("P1 Health Points", module.ui.p1.health.health_points, 10, 1, module.data.live_P1.vital_max)
-            end
-            module.ui.p1.health.checkbox_changed, module.ui.p1.health.checkbox_value = imgui.checkbox("Toggle P1 Health Percentage", module.ui.p1.health.checkbox_value)
-            
+            module.ui.p1.health.percentage_changed, module.ui.p1.health.percentage = imgui.slider_int("P1 Health Percentage", module.data.P1Param.Vital_Point, 0, 100)
             imgui.spacing()
 
-            if module.ui.p2.health.checkbox_value then
-                module.ui.p2.health.health_per_changed, module.ui.p2.health.health_per = imgui.slider_int("P2 Health Percentage", module.ui.p2.health.health_per, 0, 100)
-            else
-                module.ui.p2.health.health_points_changed, module.ui.p2.health.health_points = imgui.drag_int("P2 Health Points", module.ui.p2.health.health_points, 10, 1, module.data.live_P2.vital_max)
-            end
-            module.ui.p2.health.checkbox_changed, module.ui.p2.health.checkbox_value = imgui.checkbox("Toggle P2 Health Percentage", module.ui.p2.health.checkbox_value)
-            
-            if not (module.ui.p1.health.checkbox_value and module.ui.p2.health.checkbox_value) then
-                imgui.text_colored("Warning: Changing the Health Points directly will switch the health recovery mode to 'Standard'\nThe feature also may or may not work well", 0xFF00A9F9)
-            end
-
+            module.ui.p2.health.percentage_changed, module.ui.p2.health.percentage = imgui.slider_int("P2 Health Percentage", module.data.P2Param.Vital_Point, 0, 100)
             imgui.tree_pop()
         end
 
-        -- DRIVE UI
+        -- Drive
         if imgui.tree_node("Drive") then
-
-            if module.ui.p1.drive.checkbox_value then
-                module.ui.p1.drive.drive_stocks_changed, module.ui.p1.drive.drive_stocks = imgui.slider_int("P1 Drive Stocks", module.ui.p1.drive.drive_stocks, 0, 6)
-            else
-                module.ui.p1.drive.drive_points_changed, module.ui.p1.drive.drive_points = imgui.drag_int("P1 Drive Points", module.ui.p1.drive.drive_points, 1, 0, 60000)
-            end
-
-            module.ui.p1.drive.checkbox_changed, module.ui.p1.drive.checkbox_value = imgui.checkbox("Toggle P1 Drive Stocks/Points", module.ui.p1.drive.checkbox_value)
-
-            module.ui.p1.drive.drive_burnout_changed, module.ui.p1.drive.drive_burnout = imgui.checkbox("P1 Burnout", module.data.P1Param.Is_DG_Break)
-
-            imgui.spacing()
-
-            if module.ui.p2.drive.checkbox_value then
-                module.ui.p2.drive.drive_stocks_changed, module.ui.p2.drive.drive_stocks = imgui.slider_int("P2 Drive Stocks", module.ui.p2.drive.drive_stocks, 0, 6)
-            else
-                module.ui.p2.drive.drive_points_changed, module.ui.p2.drive.drive_points = imgui.drag_int("P2 Drive Points", module.ui.p2.drive.drive_points, 1, 0, 60000)
-            end
-            module.ui.p2.drive.checkbox_changed, module.ui.p2.drive.checkbox_value = imgui.checkbox("Toggle P2 Drive Stocks/Points", module.ui.p2.drive.checkbox_value)
-            module.ui.p2.drive.drive_burnout_changed, module.ui.p2.drive.drive_burnout = imgui.checkbox("P2 Burnout", module.data.P2Param.Is_DG_Break)
-
+            module.ui.draw_drive(module.ui.p1, "P1", module.data.P1Param)
+            imgui.separator()
+            module.ui.draw_drive(module.ui.p2, "P2", module.data.P2Param)
             imgui.tree_pop()
         end
-
     end
 end
 

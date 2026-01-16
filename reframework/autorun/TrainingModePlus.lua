@@ -28,10 +28,26 @@ local function safe_require(path)
 end
 
 do
-    local mod = safe_require("TrainingModePlusScripts/GameSpeedPlus")
-    if mod then table.insert(tmplus_modules, mod) end
-    local mod2 = safe_require("TrainingModePlusScripts/TrainingParametersPlus")
-    if mod2 then table.insert(tmplus_modules, mod2) end
+    -- fill this list with require paths (strings) or already-required module tables
+    local to_load = {
+        "TrainingModePlusScripts/GameSpeedPlus",
+        "TrainingModePlusScripts/TrainingParametersPlus",
+    }
+
+    for _, entry in ipairs(to_load) do
+        local mod
+        if type(entry) == "string" then
+            mod = safe_require(entry)
+        elseif type(entry) == "table" then
+            mod = entry
+        else
+            print(string.format("[TrainingModePlus] invalid module entry (expected string or table), got %s", type(entry)))
+        end
+
+        if mod then
+            table.insert(tmplus_modules, mod)
+        end
+    end
 end
 
 re.on_frame(function ()

@@ -5,9 +5,11 @@ REframework mod for SF6 to expand the training mode functionality
 #### Short term goals
 - [x] Game Speed - Allow control ranging from 50% to 150% at 10% increments.
 - [ ] Alter Training Mode refresh parameters (these persist through refreshes, also gauge settings are compatible with fixed and refill unless stated otherwise)
+    - [x] Simple Health - Mirror the ingame UI for percentage HP changes
     - [ ] Advanced Health - Allow unit control (compared to default training mode allowing only % increments, equivalent to 100 units). NOT COMPATIBLE WITH REFILL AND FIXED gauge setting
-    - [ ] Drive - Allow control at 0.1 drive bar increments
-    - [ ] Advanced Drive - Allow unit control (Not default since one bar is 10000 units)
+    - [x] Drive - Allow control at 0.1 drive bar increments
+    - [x] Advanced Drive - Allow unit control (Not default since one bar is 10000 units)
+    - [ ] Fix issue with opening the menu overriding the current settings
     - [ ] Super - Allow control at increments of 1/100th of a bar
     - [ ] Advanced Super - Allow unit control (Not default since one bar is 10000 units)
     - [ ] Relative Player Distance - Allow controlling the player distance upon reset, still mantaining the LEFT - CENTER - RIGHT controls built into the game. Options will be:
