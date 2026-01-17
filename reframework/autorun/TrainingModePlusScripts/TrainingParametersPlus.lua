@@ -14,19 +14,23 @@ module.ui = {}
 
 function module.ui.init(playerUI, playerParam)
 
-    -- init health ui data
+    --[[
+        init health ui data
+    ]]
     playerUI.health = {}
     -- set the health percentage to the player's vital point
     playerUI.health.percentage = playerParam.Vital_Point
     -- changed for percentage slider change
     playerUI.health.percentage_changed = false
 
-    -- init drive ui data
+    --[[
+        init drive ui data
+    ]]
     playerUI.drive = {}
 
     -- stock drive bars
     -- checks if the drive type is stock or points
-    playerUI.drive.type_stock = true
+    playerUI.drive.type_stock = playerParam.DG_Type == 1
     -- boolean variable for type change
     playerUI.drive.type_changed = false
 
@@ -50,20 +54,51 @@ function module.ui.init(playerUI, playerParam)
     playerUI.drive.burnout = false
     playerUI.drive.burnout_changed = false
 
+    --[[
+        init super ui data
+    ]]
     playerUI.super = {}
+
+    -- stock super bars
+    -- checks if the super type is stock or points
+    playerUI.super.type_stock = playerParam.SA_Type == 1
+    -- boolean variable for type change
+    playerUI.super.type_changed = false
+
+    -- stock values
+    playerUI.super.super_stocks = playerParam.SA_Stock
+    -- changed for super stocks slider change
+    playerUI.super.super_stocks_changed = false
+
+    -- points values
+    -- checkbox for enabling the precise super points adjustment
+    playerUI.super.type_points_enabled = false  
+    -- changed for super type change
+    playerUI.super.type_points_enabled_changed = false
+
+    -- set the super points to the player's super gauge points
+    playerUI.super.points = playerParam.SA_Point
+    -- changed for super points slider change
+    playerUI.super.points_changed = false
+
+
 end
 
 function module.ui.update(playerUI, playerParam)
 
     local need_update = false
 
-    -- update health ui data
+    --[[
+        update health ui data
+    ]]
     if playerUI.health.percentage_changed then
         playerParam.Vital_Point = playerUI.health.percentage
         need_update = true
     end
 
-    -- update drive ui data
+    --[[
+        update drive ui data
+    ]]
 
     -- update drive type
     if playerUI.drive.type_changed then
@@ -79,18 +114,49 @@ function module.ui.update(playerUI, playerParam)
     -- update drive stocks
     if playerUI.drive.drive_stocks_changed then
         playerParam.DG_Stock = playerUI.drive.drive_stocks
+        playerParam.DG_Point = playerUI.drive.drive_stocks * 10000
         need_update = true
     end
 
     -- update drive points
     if playerUI.drive.points_changed then
         playerParam.DG_Point = playerUI.drive.points
+        -- round to nearest stock
+        playerParam.DG_Stock = math.floor((playerUI.drive.points + 5000) / 10000)
         need_update = true
     end
 
     -- update burnout
     if playerUI.drive.burnout_changed then
         playerParam.Is_DG_Break = playerUI.drive.burnout
+        need_update = true
+    end
+
+    --[[
+        update super ui data
+    ]]
+    -- update super type
+    if playerUI.super.type_changed then
+        if playerUI.super.type_stock then
+            playerParam.SA_Type = 1
+        else
+            playerParam.SA_Type = 2
+            playerParam.Is_SA_Point_Lock = true
+        end
+        need_update = true
+    end
+
+    -- update super stocks
+    if playerUI.super.super_stocks_changed then
+        playerParam.SA_Stock = playerUI.super.super_stocks
+        playerParam.SA_Point = playerUI.super.super_stocks * 10000
+        need_update = true
+    end
+    -- update super points
+    if playerUI.super.points_changed then
+        playerParam.SA_Point = playerUI.super.points
+        -- round to nearest stock
+        playerParam.SA_Stock = math.floor(playerUI.super.points / 10000)
         need_update = true
     end
 
@@ -145,7 +211,7 @@ function module.ui.draw_drive(playerUI, playerLabel, playerParam)
     if playerUI.drive.type_stock then 
         playerUI.drive.drive_stocks_changed, playerUI.drive.drive_stocks = imgui.slider_int(playerLabel .. " Drive Stocks", playerParam.DG_Stock, 0, 6)
     else
-        playerUI.drive.type_points_enabled_changed, playerUI.drive.type_points_enabled = imgui.checkbox(playerLabel .. " Enable pointwise adjustment", playerUI.drive.type_points_enabled)
+        playerUI.drive.type_points_enabled_changed, playerUI.drive.type_points_enabled = imgui.checkbox(playerLabel .. " Enable pointwise drive gauge adjustment", playerUI.drive.type_points_enabled)
         
         if playerUI.drive.type_points_enabled then
             playerUI.drive.points_changed, playerUI.drive.points = imgui.drag_int(playerLabel .. " Drive Points", playerParam.DG_Point, 1, 0, 60000)
@@ -158,6 +224,28 @@ function module.ui.draw_drive(playerUI, playerLabel, playerParam)
         end
     end
     playerUI.drive.burnout_changed, playerUI.drive.burnout = imgui.checkbox(playerLabel .. " Burnout", playerParam.Is_DG_Break)
+end
+
+function module.ui.draw_super(playerUI, playerLabel, playerParam)
+    -- Super UI elements would go here
+    type_value = playerParam.SA_Type == 1
+    playerUI.super.type_changed, playerUI.super.type_stock = imgui.checkbox(playerLabel .. " Super Stock", type_value)
+    
+    if playerUI.super.type_stock then 
+        playerUI.super.super_stocks_changed, playerUI.super.super_stocks = imgui.slider_int(playerLabel .. " Super Stocks", playerParam.SA_Stock, 0, 3)
+    else
+        playerUI.super.type_points_enabled_changed, playerUI.super.type_points_enabled = imgui.checkbox(playerLabel .. " Enable pointwise super gauge adjustment", playerUI.super.type_points_enabled)
+        
+        if playerUI.super.type_points_enabled then
+            playerUI.super.points_changed, playerUI.super.points = imgui.drag_int(playerLabel .. " Super Points", playerParam.SA_Point, 1, 0, 30000)
+        else
+            points_increments = 0
+            current_points = playerParam.SA_Point / 10000
+            playerUI.super.points_changed, points_increments = imgui.slider_float(playerLabel .. " Super Points (stock increments of 1%)", current_points, 0, 3, "%.2f")
+            -- convert to points
+            playerUI.super.points = math.floor(points_increments * 10000)
+        end
+    end
 end
 
 -- UI rendering function
@@ -177,6 +265,14 @@ function module.draw_ui()
             module.ui.draw_drive(module.ui.p1, "P1", module.data.P1Param)
             imgui.separator()
             module.ui.draw_drive(module.ui.p2, "P2", module.data.P2Param)
+            imgui.tree_pop()
+        end
+
+        -- Super
+        if imgui.tree_node("Super") then
+            module.ui.draw_super(module.ui.p1, "P1", module.data.P1Param)
+            imgui.separator()
+            module.ui.draw_super(module.ui.p2, "P2", module.data.P2Param)
             imgui.tree_pop()
         end
     end

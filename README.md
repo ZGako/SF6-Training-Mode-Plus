@@ -9,9 +9,8 @@ REframework mod for SF6 to expand the training mode functionality
     - [ ] Advanced Health - Allow unit control (compared to default training mode allowing only % increments, equivalent to 100 units). NOT COMPATIBLE WITH REFILL AND FIXED gauge setting
     - [x] Drive - Allow control at 0.1 drive bar increments
     - [x] Advanced Drive - Allow unit control (Not default since one bar is 10000 units)
-    - [ ] Fix issue with opening the menu overriding the current settings
-    - [ ] Super - Allow control at increments of 1/100th of a bar
-    - [ ] Advanced Super - Allow unit control (Not default since one bar is 10000 units)
+    - [x] Super - Allow control at increments of 1/100th of a bar
+    - [x] Advanced Super - Allow unit control (Not default since one bar is 10000 units)
     - [ ] Relative Player Distance - Allow controlling the player distance upon reset, still mantaining the LEFT - CENTER - RIGHT controls built into the game. Options will be:
         - POINT BLANK
         - LIGHTS RANGE (around max throw range) 
