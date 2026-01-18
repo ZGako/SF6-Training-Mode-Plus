@@ -26,7 +26,7 @@ REframework mod for SF6 to expand the training mode functionality
         - [ ] Set both characters positions
         - [ ] Set midpoint between characters, then use relative player distance
         - [ ] Set one character's position, and then based on relative player distance position the other
-    - [ ] Advanced Unique Character Gauges - For characters with install level 2s, start with a specific amount of gauge left (CONFIRM FEASABILITY FIRST)
+    - [x] Advanced Unique Character Gauges - For characters with install level 2s, start with a specific amount of gauge left (CONFIRM FEASABILITY FIRST)
 - [ ] Randomizer for training mode parameters - These persist between resets - Allow for randomization options of the following parameters:
     - [ ] Health - Allow choice of interval (to have more guaranteed variety) - Allow choice of Upper and Lower bound.
     - [ ] Drive - Choice of interval (Including entire stock) or smaller - Allow for upper and lower bound.

@@ -170,6 +170,71 @@ function module.ui.update(playerUI, playerParam)
     return need_update
 end
 
+function module.ui.update_unique_gauges()
+    -- to be implemented later
+    local need_refresh = false
+
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+    local char_datas
+    if char_id1 == char_id2 then
+        char_datas = { module.data.UniqueCharData[char_id1] }
+    else 
+        char_datas = { module.data.UniqueCharData[char_id1], module.data.UniqueCharData[char_id2] }
+    end
+
+    for index, char_data in pairs(char_datas) do
+        if char_data then
+            -- update timers
+            if char_data.timers then
+                for _, timerData in pairs(char_data.timers) do
+                    local ui_timer = module.ui.unique[char_data.name][timerData.id]
+                    if ui_timer.timer_combo_changed then
+                        -- set the unique gauge data based on the selected value
+                        module.data.UniqueGaugeData[timerData.id] = ui_timer.timer_combo_value - 1
+                        need_refresh = true
+                    end
+                    -- add logic for the timer later
+                    if timerData.install == true and ui_timer.timer_combo_value == 2 then
+                        -- set the installed start value somewhere
+                        liveData = nil
+                        if index == 1 then
+                            liveData = module.data.live_P1
+                        else
+                            liveData = module.data.live_P2
+                        end
+                        liveData.style_timer = math.min(liveData.style_timer, ui_timer.installed_start_value)
+                    end
+                    if ui_timer.installed_start_value_changed then
+                        need_refresh = true
+                    end
+                end
+            end
+
+            -- update stocks
+            if char_data.stocks then
+                for _, stockData in pairs(char_data.stocks) do
+                    local ui_stock = module.ui.unique[char_data.name][stockData.id]
+                    if ui_stock.infinite_checkbox_changed then
+                        if ui_stock.infinite_checkbox then
+                            module.data.UniqueGaugeData[stockData.id] = 7
+                        else
+                            module.data.UniqueGaugeData[stockData.id] = ui_stock.stock_slider
+                        end
+                        need_refresh = true
+                    end
+                    if ui_stock.stock_slider_changed then
+                        module.data.UniqueGaugeData[stockData.id] = ui_stock.stock_slider
+                        need_refresh = true
+                    end
+                end
+            end
+        end
+    end
+
+    return need_refresh
+end
+
 function module.init()
     
     -- get the important fields at init time
@@ -179,7 +244,7 @@ function module.init()
     module.data.tf_PS = module.data.TrainingManager._tfFuncs._entries[6]:get_field("value")
     module.data.P1Param = module.data.ParameterSetting.PlayerDatas[0]
     module.data.P2Param = module.data.ParameterSetting.PlayerDatas[1]
-    module.data.UniqueGaugeData = module.data.ParameterSetting.UniqueGaugeData
+    module.data.UniqueGaugeData = module.data.ParameterSetting.UniqueData
     module.data.SelectMenu = module.data.TrainingData:get_field("SelectMenu")
     local gBattle = sdk.find_type_definition("gBattle")
     local sPlayer = gBattle:get_field("Player"):get_data(nil)
@@ -204,7 +269,7 @@ function module.init()
                 module.ui.unique[charData.name][timerData.id].timer_combo_value = 1
                 module.ui.unique[charData.name][timerData.id].timer_combo_changed = false
                 if timerData.install == true then
-                    module.ui.unique[charData.name][timerData.id].installed_start_value = nil
+                    module.ui.unique[charData.name][timerData.id].installed_start_value = timerData.timerMaxValue
                     module.ui.unique[charData.name][timerData.id].installed_start_value_changed = false
                 end
             end
@@ -226,18 +291,23 @@ function module.on_frame()
     -- update live data references
 
     need_update = false
+    need_refresh = false
 
     need_update = need_update or module.ui.update(module.ui.p1, module.data.P1Param)
     need_update = need_update or module.ui.update(module.ui.p2, module.data.P2Param)
 
     -- unique character gauges update
-    
+    need_refresh = module.ui.update_unique_gauges() or need_refresh
 
     -- updates the training mode immediately rather than waiting for refresh or whatever
     if need_update then
         sdk.call_object_func(module.data.tf_PS, "bApply")
     end
 
+    -- refreshes training mode immediately
+    if need_refresh then
+        module.data.TrainingManager._IsReqRefresh = true
+    end
 end
 
 -- UI rendering helpers
@@ -303,15 +373,16 @@ function module.ui.draw_unique_character_gauges()
             if char_data.timers then
                 for _, timerData in pairs(char_data.timers) do
                     
+                    local current_value = module.data.UniqueGaugeData[timerData.id]
+                    -- use stored timer ui values
                     local ui_timer = module.ui.unique[char_data.name][timerData.id]
-                    descriptor = timerData.descriptors[ui_timer.timer_combo_value]
+                    local descriptor = timerData.descriptors[current_value + 1]
                     imgui.text(timerData.name .. ": " .. descriptor)
 
                     -- use stored slider value as current so it persists
-                    ui_timer.timer_combo_changed, ui_timer.timer_combo_value = imgui.combo(timerData.name .. " Value ", ui_timer.timer_combo_value, timerData.descriptors)
-                    if timerData.install == true and ui_timer.timer_combo_value == 2 then
+                    ui_timer.timer_combo_changed, ui_timer.timer_combo_value = imgui.combo(timerData.name .. " Value ", current_value + 1, timerData.descriptors)
+                    if timerData.install == true and current_value == 1 then
                         -- installed timer UI elements
-                        if ui_timer.installed_start_value == nil then ui_timer.installed_start_value = timerData.timerMaxValue end
                         ui_timer.installed_start_value_changed, ui_timer.installed_start_value = imgui.slider_int(timerData.name .. " starting activation value", ui_timer.installed_start_value, 0, timerData.timerMaxValue)
                     end
                 end
@@ -320,17 +391,28 @@ function module.ui.draw_unique_character_gauges()
             -- draw stocks
             if char_data.stocks then
                 for _, stockData in pairs(char_data.stocks) do
+
+                    local current_value = module.data.UniqueGaugeData[stockData.id]
+                    -- check for value == 7 (infinite)
+                    local descriptor
+                    if current_value == 7 then
+                        descriptor = "Infinite"
+                    else 
+                        descriptor = stockData.descriptors[current_value + 1]
+                    end
                     -- use stored stock ui values
                     local ui_stock = module.ui.unique[char_data.name][stockData.id]
-                    descriptor = stockData.descriptors[ui_stock.stock_slider + 1]
                     imgui.text(stockData.name .. ": " .. descriptor)
 
                     if stockData.allowInfinite then
-                        ui_stock.infinite_checkbox_changed, ui_stock.infinite_checkbox = imgui.checkbox("Toggle Infinite " .. stockData.name, ui_stock.infinite_checkbox)
+                        ui_stock.infinite_checkbox_changed, ui_stock.infinite_checkbox = imgui.checkbox("Toggle Infinite " .. stockData.name, current_value == 7)
                     end
                     -- if infinite is enabled, don't show the slider
-                    if ui_stock.infinite_checkbox ~= true then
-                        ui_stock.stock_slider_changed, ui_stock.stock_slider = imgui.slider_int(stockData.name .. " Value", ui_stock.stock_slider, stockData.minValue, stockData.maxValue)
+                    if current_value ~= 7 then
+                        ui_stock.stock_slider_changed, ui_stock.stock_slider = imgui.slider_int(stockData.name .. " Value", current_value, stockData.minValue, stockData.maxValue)
+                        if not stockData.correspond then
+                            imgui.text_colored("Warning: The values on the slider do not correspond to the ingame values, consult the '" .. stockData.name .. ": #' value instead", 0xFF00A9F9)
+                        end
                     end
                 end
             end

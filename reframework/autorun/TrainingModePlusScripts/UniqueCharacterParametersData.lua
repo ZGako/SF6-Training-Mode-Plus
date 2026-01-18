@@ -32,6 +32,7 @@ UniqueCharData[21] = {
         maxValue = 4,
         minValue = 0,
         allowInfinite = false,
+        correspond = true,
         descriptors = {
             "0",
             "1",
@@ -50,6 +51,7 @@ UniqueCharData[3] = {
         maxValue = 2,
         minValue = 0,
         allowInfinite = true,
+        correspond = false,
         descriptors = {
             "2",
             "1",
@@ -66,6 +68,7 @@ UniqueCharData[12] = {
         maxValue = 3,
         minValue = 0,
         allowInfinite = true,
+        correspond = true,
         descriptors = {
             "0",
             "1",
@@ -89,6 +92,7 @@ UniqueCharData[16] = {
         maxValue = 3,
         minValue = 0,
         allowInfinite = true,
+        correspond = true,
         descriptors = {
             "0",
             "1",
@@ -106,6 +110,7 @@ UniqueCharData[20] = {
         maxValue = 1,
         minValue = 0,
         allowInfinite = true,
+        correspond = false,
         descriptors = {
             "Standard",
             "Activated",
@@ -117,7 +122,7 @@ UniqueCharData[15] = {
     name = "Blanka",
     timers = {{
         id = "timer_0_015",
-        name = "Lighting Beast",
+        name = "Lightning Beast",
         install = true,
         timerMaxValue = 1500,
     }},
@@ -127,6 +132,7 @@ UniqueCharData[15] = {
         maxValue = 3,
         minValue = 0,
         allowInfinite = true,
+        correspond = false,
         descriptors = {
             "3",
             "2",
@@ -154,6 +160,7 @@ UniqueCharData[28] = {
         maxValue = 5,
         minValue = 0,
         allowInfinite = true,
+        correspond = true,
         descriptors = {
             "0",
             "1",
@@ -183,6 +190,7 @@ UniqueCharData[5] = {
         maxValue = 4,
         minValue = 0,
         allowInfinite = false,
+        correspond = false,
         descriptors = {
             "1",
             "2",
