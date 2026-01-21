@@ -149,9 +149,11 @@ re.on_draw_ui(function ()
                 imgui.same_line()
                 imgui.text(module.description)
             end
+            imgui.spacing()
             imgui.tree_pop()
         end
 
+        imgui.spacing()
         imgui.tree_pop()
     end
 

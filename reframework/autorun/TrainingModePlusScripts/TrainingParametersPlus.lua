@@ -13,6 +13,7 @@ module.data = {}
 module.ui = {}
 
 module.data.UniqueCharData = require("TrainingModePlusScripts/UniqueCharacterParametersData")
+module.data.PositionParametersData = require("TrainingModePlusScripts/PositionParametersData")
 
 function module.ui.init(playerUI, playerParam)
 
@@ -170,6 +171,37 @@ function module.ui.update(playerUI, playerParam)
     return need_update
 end
 
+function module.ui.init_unique_gauges()
+    -- initialize unique character gauges ui data
+    module.ui.unique = {}
+    -- initialize the unique data based on the required unique data
+    for _, charData in pairs(module.data.UniqueCharData) do
+        module.ui.unique[charData.name] = {}
+        -- initialize timers ui data
+        if charData.timers then
+            for _, timerData in pairs(charData.timers) do
+                module.ui.unique[charData.name][timerData.id] = {}
+                module.ui.unique[charData.name][timerData.id].timer_combo_value = 1
+                module.ui.unique[charData.name][timerData.id].timer_combo_changed = false
+                if timerData.install == true then
+                    module.ui.unique[charData.name][timerData.id].installed_start_value = timerData.timerMaxValue
+                    module.ui.unique[charData.name][timerData.id].installed_start_value_changed = false
+                end
+            end
+        end
+        -- initialize stocks ui data
+        if charData.stocks then
+            for _, stockData in pairs(charData.stocks) do
+                module.ui.unique[charData.name][stockData.id] = {}
+                module.ui.unique[charData.name][stockData.id].stock_slider = 0
+                module.ui.unique[charData.name][stockData.id].stock_slider_changed = false
+                module.ui.unique[charData.name][stockData.id].infinite_checkbox = false
+                module.ui.unique[charData.name][stockData.id].infinite_checkbox_changed = false
+            end
+        end
+    end
+end
+
 function module.ui.update_unique_gauges()
     -- to be implemented later
     local need_refresh = false
@@ -203,7 +235,9 @@ function module.ui.update_unique_gauges()
                         else
                             liveData = module.data.live_P2
                         end
-                        liveData.style_timer = math.min(liveData.style_timer, ui_timer.installed_start_value)
+                        if module.data.sGame.stage_timer == 1 then
+                            liveData.style_timer = ui_timer.installed_start_value
+                        end
                     end
                     if ui_timer.installed_start_value_changed then
                         need_refresh = true
@@ -235,6 +269,139 @@ function module.ui.update_unique_gauges()
     return need_refresh
 end
 
+function module.ui.init_position()
+
+    -- initialize relative position ui data
+    module.ui.position = {}
+
+    module.ui.position.relative_distance_changed = false
+
+    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+    local total_offset = offset1 + offset2
+
+    module.ui.position.relative_distance_min = module.data.PositionParametersData.default_relative_distance.min + total_offset
+    module.ui.position.relative_distance_max = module.data.PositionParametersData.default_relative_distance.max - total_offset
+    if module.data.SelectMenu.StartLocation == 0 then
+        -- center pivot
+        module.ui.position.relative_distance = 300.0
+    else
+        module.ui.position.relative_distance = module.ui.position.relative_distance_min
+    end
+
+    -- checkbox for enabling precise relative distance adjustment
+    module.ui.position.precise_relative_distance_enabled = false
+    module.ui.position.precise_relative_distance_enabled_changed = false
+
+    -- store old starting position for disabling and proper calculations
+    module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
+
+    local function on_pre(args)
+        -- no pre logic needed
+    end
+    local function on_post(retval)
+        if not module.ui.position.precise_relative_distance_enabled then
+            -- if its disabled
+            return
+        end
+
+        -- get the current characters to determine the offset to the relative distances
+        local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+        local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+
+        local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+        local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+        local total_offset = offset1 + offset2
+        
+        -- we know the precise thing is enabled, but we still want to save the new start position if its not custom
+        if module.data.SelectMenu.StartLocation ~= 3 then
+            module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
+        else
+            --[[
+            
+            BOOKMARK TO CHANGE FOR CUSTOM POSITIONS LATER
+            
+            ]]
+            -- FOR NOW**, if we have the custom position, we actually want to reset it to the old starting position just to have the accurate calculation
+            module.data.SelectMenu.StartLocation = module.ui.position.old_starting_position
+        end
+
+        if module.data.SelectMenu.StartLocation == 0 then
+            -- center pivot
+            local center_position = (module.ui.position.relative_distance) / 2.0
+            module.data.SelectMenu.PlayerDatas[0].ManualPosX = -center_position - (total_offset / 2.0)
+            module.data.SelectMenu.PlayerDatas[1].ManualPosX = center_position + (total_offset / 2.0)
+        elseif module.data.SelectMenu.StartLocation == 1 then
+            -- right side pivot
+            local right_position = module.data.PositionParametersData.default_screen_position.max 
+            module.data.SelectMenu.PlayerDatas[0].ManualPosX = right_position - module.ui.position.relative_distance - total_offset
+            module.data.SelectMenu.PlayerDatas[1].ManualPosX = right_position
+        elseif module.data.SelectMenu.StartLocation == 2 then
+            -- left side pivot
+            local left_position = module.data.PositionParametersData.default_screen_position.min
+            module.data.SelectMenu.PlayerDatas[0].ManualPosX = left_position
+            module.data.SelectMenu.PlayerDatas[1].ManualPosX = left_position + module.ui.position.relative_distance + total_offset
+
+        elseif module.data.SelectMenu.StartLocation == 3 then
+            -- custom position pivot
+            if math.abs(module.data.SelectMenu.PlayerDatas[0].ManualPosX - module.data.SelectMenu.PlayerDatas[1].ManualPosX) ~= module.ui.position.relative_distance then
+                -- adjust positions to match relative distance
+                -- expand/contract around the middle point, but also check the screen bounds
+                local middle_point = (module.data.SelectMenu.PlayerDatas[0].ManualPosX + module.data.SelectMenu.PlayerDatas[1].ManualPosX) / 2.0
+                local half_distance = module.ui.position.relative_distance / 2.0
+                local new_pos1 = middle_point - half_distance
+                local new_pos2 = middle_point + half_distance
+                -- check screen bounds
+                local screen_min = module.data.PositionParametersData.default_screen_position.min
+                local screen_max = module.data.PositionParametersData.default_screen_position.max
+                if new_pos1 < screen_min then
+                    new_pos1 = screen_min
+                    new_pos2 = screen_min + module.ui.position.relative_distance
+                elseif new_pos2 > screen_max then
+                    new_pos2 = screen_max
+                    new_pos1 = screen_max - module.ui.position.relative_distance
+                end
+                module.data.SelectMenu.PlayerDatas[0].ManualPosX = new_pos1 - (total_offset / 2.0)
+                module.data.SelectMenu.PlayerDatas[1].ManualPosX = new_pos2 + (total_offset / 2.0)
+            end
+        end
+
+        module.data.SelectMenu.StartLocation = 3
+    end
+
+    sdk.hook(sdk.find_type_definition("app.training.tf_SelectMenu.FuncData"):get_method("ChangeStartLocationType"), on_pre, on_post)
+end
+
+function module.ui.update_position()
+    -- get the current characters to determine the offset to the relative distances
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+
+    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+    local total_offset = offset1 + offset2
+
+    local need_refresh = false
+
+    module.ui.position.relative_distance_min = module.data.PositionParametersData.default_relative_distance.min + total_offset
+    module.ui.position.relative_distance_max = module.data.PositionParametersData.default_relative_distance.max - total_offset
+    module.ui.position.relative_distance = math.min(math.max(module.ui.position.relative_distance, module.ui.position.relative_distance_min), module.ui.position.relative_distance_max)
+
+    if module.ui.position.precise_relative_distance_enabled_changed then
+        need_refresh = true
+        -- this means we either enabled or disabled precise relative distance adjustment
+        if module.ui.position.precise_relative_distance_enabled then
+            -- first store the old starting position
+            module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
+        else 
+            -- if we disabled it, we should restore the old starting position
+            module.data.SelectMenu.StartLocation = module.ui.position.old_starting_position
+        end
+    end
+
+    return need_refresh
+end
+
 function module.init()
     
     -- get the important fields at init time
@@ -242,6 +409,7 @@ function module.init()
     module.data.TrainingData = module.data.TrainingManager:get_field("_tData")
     module.data.ParameterSetting = module.data.TrainingData:get_field("ParameterSetting")
     module.data.tf_PS = module.data.TrainingManager._tfFuncs._entries[6]:get_field("value")
+    module.data.tf_SM = module.data.TrainingManager._tfFuncs._entries[0]:get_field("value")
     module.data.P1Param = module.data.ParameterSetting.PlayerDatas[0]
     module.data.P2Param = module.data.ParameterSetting.PlayerDatas[1]
     module.data.UniqueGaugeData = module.data.ParameterSetting.UniqueData
@@ -249,42 +417,26 @@ function module.init()
     local gBattle = sdk.find_type_definition("gBattle")
     local sPlayer = gBattle:get_field("Player"):get_data(nil)
     local cPlayer = sPlayer.mcPlayer
+    -- use sGame.stage_timer == 1 to check for the refresh (you can apply all the settings you want here and they won't get overwritten by the game at this point)
+    module.data.sGame = gBattle:get_field("Game"):get_data(nil)
     module.data.live_P1 = cPlayer[0]
     module.data.live_P2 = cPlayer[1]
+
+    module.data.start_tracking = 0
+
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+
+    module.types = {}
+    module.types.sfix3 = sdk.find_type_definition("via.Sfix3")
 
     -- initialize ui data
     module.ui.p1 = {}
     module.ui.p2 = {}
     module.ui.init(module.ui.p1, module.data.P1Param)
     module.ui.init(module.ui.p2, module.data.P2Param)
-    -- initialize unique character gauges ui data
-    module.ui.unique = {}
-    -- initialize the unique data based on the required unique data
-    for _, charData in pairs(module.data.UniqueCharData) do
-        module.ui.unique[charData.name] = {}
-        -- initialize timers ui data
-        if charData.timers then
-            for _, timerData in pairs(charData.timers) do
-                module.ui.unique[charData.name][timerData.id] = {}
-                module.ui.unique[charData.name][timerData.id].timer_combo_value = 1
-                module.ui.unique[charData.name][timerData.id].timer_combo_changed = false
-                if timerData.install == true then
-                    module.ui.unique[charData.name][timerData.id].installed_start_value = timerData.timerMaxValue
-                    module.ui.unique[charData.name][timerData.id].installed_start_value_changed = false
-                end
-            end
-        end
-        -- initialize stocks ui data
-        if charData.stocks then
-            for _, stockData in pairs(charData.stocks) do
-                module.ui.unique[charData.name][stockData.id] = {}
-                module.ui.unique[charData.name][stockData.id].stock_slider = 0
-                module.ui.unique[charData.name][stockData.id].stock_slider_changed = false
-                module.ui.unique[charData.name][stockData.id].infinite_checkbox = false
-                module.ui.unique[charData.name][stockData.id].infinite_checkbox_changed = false
-            end
-        end
-    end
+    module.ui.init_unique_gauges()
+    module.ui.init_position()
 end
 
 function module.on_frame()
@@ -298,6 +450,9 @@ function module.on_frame()
 
     -- unique character gauges update
     need_refresh = module.ui.update_unique_gauges() or need_refresh
+
+    -- position update
+    module.ui.update_position()
 
     -- updates the training mode immediately rather than waiting for refresh or whatever
     if need_update then
@@ -366,8 +521,11 @@ function module.ui.draw_unique_character_gauges()
         char_datas = { module.data.UniqueCharData[char_id1], module.data.UniqueCharData[char_id2] }
     end
 
+    local any_installed_timer = false
+
     for _, char_data in pairs(char_datas) do
         if char_data then
+            any_installed_timer = true
             imgui.text("Character: " .. char_data.name)
             -- draw timers
             if char_data.timers then
@@ -417,8 +575,11 @@ function module.ui.draw_unique_character_gauges()
                 end
             end
         end
-        imgui.separator()
     end
+    if any_installed_timer then
+        imgui.text_colored("Not available for these characters", 0xFF00A9F9)
+    end
+    imgui.separator()
 end
 
 -- UI rendering function
@@ -452,6 +613,22 @@ function module.draw_ui()
         -- Unique Character Gauges
         if imgui.tree_node("Unique Character Gauges") then
             module.ui.draw_unique_character_gauges()
+            imgui.tree_pop()
+        end
+
+        -- -- Starting position
+        -- if imgui.tree_node("Starting Position") then
+        --     imgui.tree_pop()
+        -- end
+
+        -- Relative Player Position
+        if imgui.tree_node("Relative Player Position") then
+
+            module.ui.position.precise_relative_distance_enabled_changed, module.ui.position.precise_relative_distance_enabled = imgui.checkbox("Enable Precise Relative Distance Adjustment", module.ui.position.precise_relative_distance_enabled)
+
+            if module.ui.position.precise_relative_distance_enabled then
+                module.ui.position.relative_distance_changed, module.ui.position.relative_distance = imgui.drag_float("Relative Distance P1 to P2", module.ui.position.relative_distance, 1.0, module.ui.position.relative_distance_min, module.ui.position.relative_distance_max)
+            end
             imgui.tree_pop()
         end
 
