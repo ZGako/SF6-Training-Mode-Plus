@@ -1,7 +1,7 @@
 -- intellinsense
 local re = re
 local sdk = sdk
-local reframework = reframework 
+local reframework = reframework
 local imgui = imgui
 
 local module = {}
@@ -13,7 +13,6 @@ module.data = {}
 module.ui = {}
 
 function module.init()
-
     -- get the important fields at init time
     local TrainingManager = sdk.get_managed_singleton("app.training.TrainingManager")
     local TrainingData = TrainingManager:get_field("_tData")
@@ -24,7 +23,6 @@ function module.init()
     -- OtherSetting -> OS_Game_Speed - game speed enum (0 to 10)
     -- OtherSetting -> Is_Speed_Setting - boolean for enabling different speeds
     -- tf_OS -> ApplyGameSpeed() - function to apply the game speed
-
 
     -- *** Init UI data variables ***
 
@@ -39,22 +37,24 @@ function module.init()
 
     -- Setup Hooks
 
-    sdk.hook(sdk.find_type_definition("app.training.tf_OtherSetting.FuncData"):get_method("SetGameSpeed(app.training.GameSpeed)"), function (args)
-        local ingame_new_speed = sdk.to_int64(args[3])
-        -- if the new speed is not 100%
-        if ingame_new_speed ~= 5 and module.ui.speed ~= 6 then
-            return sdk.PreHookResult.SKIP_ORIGINAL
-        else
-            module.ui.speed = ingame_new_speed + 1
+    sdk.hook(
+        sdk.find_type_definition("app.training.tf_OtherSetting.FuncData"):get_method(
+            "SetGameSpeed(app.training.GameSpeed)"
+        ),
+        function(args)
+            local ingame_new_speed = sdk.to_int64(args[3])
+            -- if the new speed is not 100%
+            if ingame_new_speed ~= 5 and module.ui.speed ~= 6 then
+                return sdk.PreHookResult.SKIP_ORIGINAL
+            else
+                module.ui.speed = ingame_new_speed + 1
+            end
         end
-    end)
-
+    )
 end
 
 function module.on_frame()
-
     if module.ui.speed_changed_by_script then
-
         module.ui.speed_changed_by_script = false
 
         -- if the game is 100%, disable the boolean (that way it doesn't mess as much with the ingame UI)
@@ -72,11 +72,13 @@ function module.on_frame()
 end
 
 function module.draw_ui()
-
     if imgui.collapsing_header("Game Speed Plus") then
-
-        module.ui.speed_changed_by_script, module.ui.speed = imgui.combo("Game Speed", module.ui.speed,
-        {"50%", "60%", "70%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"})
+        module.ui.speed_changed_by_script, module.ui.speed =
+            imgui.combo(
+            "Game Speed",
+            module.ui.speed,
+            {"50%", "60%", "70%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"}
+        )
 
         imgui.same_line()
 
@@ -86,7 +88,6 @@ function module.draw_ui()
         end
 
         imgui.text("Note: You can use both the script menu and the ingame menu. Latest change takes precedence.")
-
     end
 end
 
