@@ -264,9 +264,11 @@ function module.ui.update_unique_gauges()
 end
 
 function module.ui.init_position()
-    -- initialize relative position ui data
     module.ui.position = {}
 
+    --[[ 
+        initialize relative position ui data
+    ]]
     module.ui.position.relative_distance_changed = false
 
     local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
@@ -280,8 +282,10 @@ function module.ui.init_position()
     if module.data.SelectMenu.StartLocation == 0 then
         -- center pivot
         module.ui.position.relative_distance = 300.0
+        module.ui.position.discrete_relative_distance_preset_index = 6
     else
         module.ui.position.relative_distance = module.ui.position.relative_distance_min
+        module.ui.position.discrete_relative_distance_preset_index = 1
     end
 
     -- checkbox for enabling precise relative distance adjustment
@@ -293,12 +297,45 @@ function module.ui.init_position()
     module.ui.position.discrete_relative_distance_enabled_changed = false
 
     -- state variables of the combo picker for the discrete relative distance
-    module.ui.position.discrete_relative_distance_preset_index = 1
     module.ui.position.discrete_relative_distance_preset_index_changed = false
 
     -- store old starting position for disabling and proper calculations
     module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
 
+    --[[
+        Starting position initialization
+    ]]
+    -- checkbox for enabling starting position adjustment
+    module.ui.position.starting_position_enabled = false
+    module.ui.position.starting_position_enabled_changed = false
+
+    -- float value for the actual starting position
+    module.ui.position.starting_position_value = 0.0
+    module.ui.position.starting_position_value_changed = false
+
+    -- combo for type of starting position: (center pivot point, P1 pivot, P2 pivot)
+    module.ui.position.starting_position_pivot_type_index = 1
+    module.ui.position.starting_position_pivot_type_index_changed = false
+
+    -- combo for "from where" to calculate the distance (absolute position, distance from left corner, distance from right corner)
+    module.ui.position.starting_position_distance_reference_index = 1
+    module.ui.position.starting_position_distance_reference_index_changed = false
+    module.ui.position.starting_position_distance_reference_previous_index = 1
+
+    -- checkbox for discrete reference point adjustment toggle (from discrete presets or manual adjustment)
+    module.ui.position.starting_position_discrete_reference_enabled = true
+    module.ui.position.starting_position_discrete_reference_enabled_changed = false
+
+    -- integer value for the slider of the discrete reference point
+    module.ui.position.starting_position_discrete_reference_value = 0
+    module.ui.position.starting_position_discrete_reference_value_changed = false
+
+    -- flag to show warning if the position is invalid
+    module.ui.position.show_position_warning = false
+
+    --[[
+        HOOKS
+    ]]
     local function on_pre(args)
         -- no pre logic needed
     end
@@ -308,6 +345,10 @@ function module.ui.init_position()
             return
         end
 
+        log.debug(
+            module.data.SelectMenu.StartLocation .. " old pos: " .. tostring(module.ui.position.old_starting_position)
+        )
+
         -- get the current characters to determine the offset to the relative distances
         local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
         local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
@@ -316,17 +357,16 @@ function module.ui.init_position()
         local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
         local total_offset = offset1 + offset2
 
-        -- we know the precise thing is enabled, but we still want to save the new start position if its not custom
-        if module.data.SelectMenu.StartLocation ~= 3 then
-            module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
+        if module.ui.position.starting_position_enabled then
+            module.data.SelectMenu.StartLocation = 3
         else
-            --[[
-            
-            BOOKMARK TO CHANGE FOR CUSTOM POSITIONS LATER
-            
-            ]]
-            -- FOR NOW**, if we have the custom position, we actually want to reset it to the old starting position just to have the accurate calculation
-            module.data.SelectMenu.StartLocation = module.ui.position.old_starting_position
+            if module.data.SelectMenu.StartLocation ~= 3 then
+                -- if starting position adjustment is disabled, we just use the old starting position
+                module.ui.position.old_starting_position = module.data.SelectMenu.StartLocation
+            else
+                -- if starting position adjustment is disabled, we just use the old starting position
+                module.data.SelectMenu.StartLocation = module.ui.position.old_starting_position
+            end
         end
 
         if module.data.SelectMenu.StartLocation == 0 then
@@ -348,32 +388,53 @@ function module.ui.init_position()
                 left_position + module.ui.position.relative_distance + total_offset
         elseif module.data.SelectMenu.StartLocation == 3 then
             -- custom position pivot
-            if
-                math.abs(
-                    module.data.SelectMenu.PlayerDatas[0].ManualPosX - module.data.SelectMenu.PlayerDatas[1].ManualPosX
-                ) ~= module.ui.position.relative_distance
-             then
-                -- adjust positions to match relative distance
-                -- expand/contract around the middle point, but also check the screen bounds
-                local middle_point =
-                    (module.data.SelectMenu.PlayerDatas[0].ManualPosX + module.data.SelectMenu.PlayerDatas[1].ManualPosX) /
-                    2.0
-                local half_distance = module.ui.position.relative_distance / 2.0
-                local new_pos1 = middle_point - half_distance
-                local new_pos2 = middle_point + half_distance
-                -- check screen bounds
-                local screen_min = module.data.PositionParametersData.default_screen_position.min
-                local screen_max = module.data.PositionParametersData.default_screen_position.max
-                if new_pos1 < screen_min then
-                    new_pos1 = screen_min
-                    new_pos2 = screen_min + module.ui.position.relative_distance
-                elseif new_pos2 > screen_max then
-                    new_pos2 = screen_max
-                    new_pos1 = screen_max - module.ui.position.relative_distance
-                end
-                module.data.SelectMenu.PlayerDatas[0].ManualPosX = new_pos1 - (total_offset / 2.0)
-                module.data.SelectMenu.PlayerDatas[1].ManualPosX = new_pos2 + (total_offset / 2.0)
+            local new_pos1
+            local new_pos2
+
+            -- first, calculate the position of the fulcrum based on the distance reference
+            local fulcrum_position = 0.0
+            if module.ui.position.starting_position_distance_reference_index == 1 then
+                -- absolute position
+                fulcrum_position = module.ui.position.starting_position_value
+            elseif module.ui.position.starting_position_distance_reference_index == 2 then
+                -- distance from left corner
+                fulcrum_position =
+                    module.ui.position.starting_position_value +
+                    module.data.PositionParametersData.default_screen_position.min
+            elseif module.ui.position.starting_position_distance_reference_index == 3 then
+                -- distance from right corner
+                fulcrum_position =
+                    module.data.PositionParametersData.default_screen_position.max -
+                    module.ui.position.starting_position_value
             end
+
+            -- calculate the new positions based on the pivot type
+            if module.ui.position.starting_position_pivot_type_index == 1 then
+                -- center pivot type
+                new_pos1 = fulcrum_position - (module.ui.position.relative_distance / 2.0)
+                new_pos2 = fulcrum_position + (module.ui.position.relative_distance / 2.0)
+            elseif module.ui.position.starting_position_pivot_type_index == 2 then
+                -- p1 player pivot type
+                new_pos1 = fulcrum_position
+                new_pos2 = fulcrum_position + module.ui.position.relative_distance
+            elseif module.ui.position.starting_position_pivot_type_index == 3 then
+                -- p2 player pivot type
+                new_pos1 = fulcrum_position - module.ui.position.relative_distance
+                new_pos2 = fulcrum_position
+            end
+
+            -- check screen bounds
+            local screen_min = module.data.PositionParametersData.default_screen_position.min
+            local screen_max = module.data.PositionParametersData.default_screen_position.max
+            if new_pos1 < screen_min then
+                new_pos1 = screen_min
+                new_pos2 = screen_min + module.ui.position.relative_distance
+            elseif new_pos2 > screen_max then
+                new_pos2 = screen_max
+                new_pos1 = screen_max - module.ui.position.relative_distance
+            end
+            module.data.SelectMenu.PlayerDatas[0].ManualPosX = new_pos1 - (total_offset / 2.0)
+            module.data.SelectMenu.PlayerDatas[1].ManualPosX = new_pos2 + (total_offset / 2.0)
         end
 
         module.data.SelectMenu.StartLocation = 3
@@ -433,6 +494,123 @@ function module.ui.update_position()
         else
             -- if we disabled it, we should restore the old starting position
             module.data.SelectMenu.StartLocation = module.ui.position.old_starting_position
+        end
+    end
+
+    if module.ui.position.starting_position_enabled_changed then
+        need_refresh = true
+        -- if we disabled starting position adjustment, restore the old starting position
+        if module.ui.position.starting_position_enabled then
+            module.ui.position.old_starting_position = 3
+        else
+            -- when we disable starting position, we just default back to the middle of the screen, cuz it don't matter
+            module.ui.position.old_starting_position = 0
+        end
+    end
+
+    if module.ui.position.starting_position_discrete_reference_value_changed then
+        -- set the actual starting position value to the discrete value but scaling it properly
+        -- values go from -6 to 6, mapping to min and max screen positions
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+        local discrete_value = module.ui.position.starting_position_discrete_reference_value
+        -- -6 to 6 is 13 steps
+        module.ui.position.starting_position_value = min_pos + ((discrete_value + 6) / 12) * (max_pos - min_pos)
+    end
+
+    -- when the combo picker for the reference point, we adjust the value, such that it corresponds to the same position
+    if module.ui.position.starting_position_distance_reference_index_changed then
+        need_refresh = true
+        local previous_index = module.ui.position.starting_position_distance_reference_previous_index
+        local current_value = module.ui.position.starting_position_value
+
+        -- first, calculate the fulcrum position based on the previous index
+        local fulcrum_position = 0.0
+        if previous_index == 1 then
+            -- absolute position
+            fulcrum_position = current_value
+        elseif previous_index == 2 then
+            -- distance from left corner
+            fulcrum_position = current_value + module.data.PositionParametersData.default_screen_position.min
+        elseif previous_index == 3 then
+            -- distance from right corner
+            fulcrum_position = module.data.PositionParametersData.default_screen_position.max - current_value
+        end
+
+        -- now, based on the new index, calculate the new starting position value
+        if module.ui.position.starting_position_distance_reference_index == 1 then
+            -- absolute position
+            module.ui.position.starting_position_value = fulcrum_position
+        elseif module.ui.position.starting_position_distance_reference_index == 2 then
+            -- distance from left corner
+            module.ui.position.starting_position_value =
+                fulcrum_position - module.data.PositionParametersData.default_screen_position.min
+        elseif module.ui.position.starting_position_distance_reference_index == 3 then
+            -- distance from right corner
+            module.ui.position.starting_position_value =
+                module.data.PositionParametersData.default_screen_position.max - fulcrum_position
+        end
+
+        module.ui.position.starting_position_distance_reference_previous_index =
+            module.ui.position.starting_position_distance_reference_index
+    end
+
+    -- verify if the starting position values are valid, if not, show a warning
+    if
+        module.ui.position.starting_position_value_changed or module.ui.position.relative_distance_changed or
+            module.ui.position.discrete_relative_distance_preset_index_changed or
+            module.ui.position.starting_position_pivot_type_index_changed or
+            module.ui.position.starting_position_distance_reference_index_changed or
+            module.ui.position.starting_position_discrete_reference_value_changed
+     then
+        -- first, calculate the position of the fulcrum based on the distance reference
+        local fulcrum_position = 0.0
+        if module.ui.position.starting_position_distance_reference_index == 1 then
+            -- absolute position
+            fulcrum_position = module.ui.position.starting_position_value
+        elseif module.ui.position.starting_position_distance_reference_index == 2 then
+            -- distance from left corner
+            fulcrum_position =
+                module.ui.position.starting_position_value +
+                module.data.PositionParametersData.default_screen_position.min
+        elseif module.ui.position.starting_position_distance_reference_index == 3 then
+            -- distance from right corner
+            fulcrum_position =
+                module.data.PositionParametersData.default_screen_position.max -
+                module.ui.position.starting_position_value
+        end
+
+        -- update the discrete value based on the actual starting position value
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+        local fulcrum_relative_position = fulcrum_position - min_pos
+        local relative_range = max_pos - min_pos
+        local discrete_value = math.floor((fulcrum_relative_position / relative_range) * 12 + 0.5) - 6
+        module.ui.position.starting_position_discrete_reference_value = discrete_value
+
+        -- based on the pivot type, check if the positions are valid
+        local new_pos1
+        local new_pos2
+        if module.ui.position.starting_position_pivot_type_index == 1 then
+            -- center pivot type
+            new_pos1 = fulcrum_position - (module.ui.position.relative_distance / 2.0)
+            new_pos2 = fulcrum_position + (module.ui.position.relative_distance / 2.0)
+        elseif module.ui.position.starting_position_pivot_type_index == 2 then
+            -- p1 player pivot type
+            new_pos1 = fulcrum_position
+            new_pos2 = fulcrum_position + module.ui.position.relative_distance
+        elseif module.ui.position.starting_position_pivot_type_index == 3 then
+            -- p2 player pivot type
+            new_pos1 = fulcrum_position - module.ui.position.relative_distance
+            new_pos2 = fulcrum_position
+        end
+        -- check screen bounds
+        local screen_min = module.data.PositionParametersData.default_screen_position.min
+        local screen_max = module.data.PositionParametersData.default_screen_position.max
+        if new_pos1 < screen_min or new_pos2 > screen_max then
+            module.ui.position.show_position_warning = true
+        else
+            module.ui.position.show_position_warning = false
         end
     end
 
@@ -663,7 +841,9 @@ end
 
 function module.ui.draw_relative_position()
     module.ui.position.relative_distance_enabled_changed, module.ui.position.relative_distance_enabled =
-        imgui.checkbox("Enable Relative Distance Adjustment", module.ui.position.relative_distance_enabled)
+        imgui.checkbox("Enable Start Position Adjustment", module.ui.position.relative_distance_enabled)
+
+    imgui.separator()
 
     if module.ui.position.relative_distance_enabled then
         module.ui.position.discrete_relative_distance_enabled_changed,
@@ -690,7 +870,95 @@ function module.ui.draw_relative_position()
                 module.ui.position.relative_distance_max
             )
         end
+
+        imgui.separator()
+
+        -- checkbox for enabling starting position adjustment
+        module.ui.position.starting_position_enabled_changed, module.ui.position.starting_position_enabled =
+            imgui.checkbox("Enable Starting Position Adjustment", module.ui.position.starting_position_enabled)
+        if module.ui.position.starting_position_enabled then
+            -- combo picker for type of starting position
+            module.ui.position.starting_position_pivot_type_index_changed,
+                module.ui.position.starting_position_pivot_type_index =
+                imgui.combo(
+                "Starting Position Pivot Type",
+                module.ui.position.starting_position_pivot_type_index,
+                {
+                    "Center Pivot Point",
+                    "Left Player Position Pivot (P1 Side)",
+                    "Right Player Position Pivot (P2 Side)"
+                }
+            )
+
+            -- checkbox for discrete reference point adjustment toggle
+            module.ui.position.starting_position_discrete_reference_enabled_changed,
+                module.ui.position.starting_position_discrete_reference_enabled =
+                imgui.checkbox(
+                "Use Discrete Starting Position Reference",
+                module.ui.position.starting_position_discrete_reference_enabled
+            )
+
+            if module.ui.position.starting_position_discrete_reference_enabled then
+                -- slider for discrete reference point
+                module.ui.position.starting_position_discrete_reference_value_changed,
+                    module.ui.position.starting_position_discrete_reference_value =
+                    imgui.slider_int(
+                    "Starting Position Reference",
+                    module.ui.position.starting_position_discrete_reference_value,
+                    -6,
+                    6
+                )
+            else
+                -- combo picker for distance reference
+                module.ui.position.starting_position_distance_reference_index_changed,
+                    module.ui.position.starting_position_distance_reference_index =
+                    imgui.combo(
+                    "Starting Position Distance Reference",
+                    module.ui.position.starting_position_distance_reference_index,
+                    {
+                        "Absolute Position",
+                        "Distance from Left Corner",
+                        "Distance from Right Corner"
+                    }
+                )
+
+                -- slider for starting position
+
+                -- if the reference is not absolute position, adjust the min/max accordingly
+                local starting_position_min = 0.0
+                local starting_position_max = 0.0
+                if module.ui.position.starting_position_distance_reference_index == 1 then
+                    -- absolute position
+                    starting_position_min = module.data.PositionParametersData.default_screen_position.min
+                    starting_position_max = module.data.PositionParametersData.default_screen_position.max
+                else
+                    -- distance from a corner
+                    starting_position_min = 0.0
+                    starting_position_max =
+                        module.data.PositionParametersData.default_screen_position.max -
+                        module.data.PositionParametersData.default_screen_position.min
+                end
+                module.ui.position.starting_position_value_changed, module.ui.position.starting_position_value =
+                    imgui.drag_float(
+                    "Starting Position X",
+                    module.ui.position.starting_position_value,
+                    1.0,
+                    starting_position_min,
+                    starting_position_max
+                )
+            end
+
+            if module.ui.position.show_position_warning then
+                imgui.text_colored(
+                    "Warning: The current combination of relative distance and starting position would cause the character to go offscreen!\nThe position will be adjust to respect the relative position and screen bounds.",
+                    0xFF00A9F9
+                )
+            end
+        end
     end
+end
+
+function module.ui.draw_starting_position()
 end
 
 -- UI rendering function
@@ -729,13 +997,8 @@ function module.draw_ui()
             imgui.tree_pop()
         end
 
-        -- -- Starting position
-        -- if imgui.tree_node("Starting Position") then
-        --     imgui.tree_pop()
-        -- end
-
-        -- Relative Player Position
-        if imgui.tree_node("Relative Player Position") then
+        -- Starting Player Position
+        if imgui.tree_node("Starting Player Position") then
             module.ui.draw_relative_position()
             imgui.tree_pop()
         end

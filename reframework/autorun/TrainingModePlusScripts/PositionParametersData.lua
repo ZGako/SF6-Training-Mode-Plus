@@ -40,13 +40,17 @@ PositionalParametersData.preset_relative_distance_offsets = {
         40.0,
         100.0,
         140.0,
+        212.0,
+        230.0,
         330.0
     },
     names = {
         "Point Blank",
         "Close Range",
-        "Medium Range",
+        "Mid Range",
         "Far Range",
+        "Throw Tech Distance",
+        "Roundstart Distance",
         "Zoning Range",
         "Max Range"
     }
