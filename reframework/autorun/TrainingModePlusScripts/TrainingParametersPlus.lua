@@ -833,7 +833,7 @@ function module.ui.draw_unique_character_gauges()
             end
         end
     end
-    if any_installed_timer then
+    if not any_installed_timer then
         imgui.text_colored("Not available for these characters", 0xFF00A9F9)
     end
     imgui.separator()

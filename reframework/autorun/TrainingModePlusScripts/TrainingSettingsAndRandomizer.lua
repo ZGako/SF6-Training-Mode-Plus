@@ -328,6 +328,8 @@ function PlayerParam:draw_health_ui(PlayerIndex)
     PlayerView.health_changed, PlayerView.health =
         imgui.slider_int(PlayerLabel .. " Health Percentage", PlayerModel.Vital_Point, 0, 100)
 
+    imgui.separator()
+
     if PlayerController.health_randomizer.enabled then
         -- stop the health slider disabled section
         imgui.end_disabled()
@@ -406,6 +408,12 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
         end
     end
 
+    -- burnout toggle
+    PlayerView.burnout_changed, PlayerView.burnout =
+        imgui.checkbox(PlayerLabel .. " Drive Burnout", PlayerModel.Is_DG_Break)
+
+    imgui.separator()
+
     if PlayerController.drive_randomizer.enabled then
         -- stop the drive slider disabled section
         imgui.end_disabled()
@@ -425,9 +433,6 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
             PlayerController.drive_points_type
         )
     end
-    -- burnout toggle
-    PlayerView.burnout_changed, PlayerView.burnout =
-        imgui.checkbox(PlayerLabel .. " Drive Burnout", PlayerModel.Is_DG_Break)
 
     -- randomizer checkbox
     _, PlayerController.drive_randomizer.enabled =
@@ -558,6 +563,8 @@ function PlayerParam:draw_super_ui(PlayerIndex)
             PlayerView.super_points = math.floor(points_increments * 10000)
         end
     end
+
+    imgui.separator()
 
     if PlayerController.super_randomizer.enabled then
         imgui.end_disabled()
@@ -729,6 +736,411 @@ function PlayerParam:randomize()
 end
 
 --[[
+    Unique character gauges
+]]
+module.data.UniqueCharData = require("TrainingModePlusScripts/UniqueCharacterParametersData")
+
+local UniqueGaugeParam = {
+    model = {},
+    view = {},
+    controller = {}
+}
+
+function UniqueGaugeParam:init(ParameterSettingsData)
+    -- unique gauge parameter initialization
+    self.model = ParameterSettingsData
+
+    for _, charData in pairs(module.data.UniqueCharData) do
+        self.view[charData.name] = {}
+        self.controller[charData.name] = {}
+        -- initialize timers ui data
+        if charData.timers then
+            for _, timerData in pairs(charData.timers) do
+                self.view[charData.name][timerData.id] = {}
+                self.controller[charData.name][timerData.id] = {}
+
+                self.view[charData.name][timerData.id].timer_combo_value = 1
+                self.view[charData.name][timerData.id].timer_combo_changed = false
+
+                -- randomizer settings
+                self.controller[charData.name][timerData.id].randomizer_enabled = false
+
+                if timerData.install == true then
+                    -- this is the only case we need to store the start value
+                    self.controller[charData.name][timerData.id].installed_start_value = timerData.timerMaxValue
+                    self.view[charData.name][timerData.id].installed_start_value_changed = false
+
+                    -- randomizer for install timers
+
+                    -- probability of it being disabled when randomized, default is 50%
+                    self.controller[charData.name][timerData.id].disabled_prob_percentage = 50
+
+                    self.controller[charData.name][timerData.id].bounds_enabled = false
+                    self.controller[charData.name][timerData.id].lower_bound = 0
+                    self.controller[charData.name][timerData.id].upper_bound = timerData.timerMaxValue
+                end
+            end
+        end
+        -- initialize stocks ui data
+        if charData.stocks then
+            for _, stockData in pairs(charData.stocks) do
+                self.view[charData.name][stockData.id] = {}
+                self.controller[charData.name][stockData.id] = {}
+
+                self.view[charData.name][stockData.id].stock_slider = 0
+                self.view[charData.name][stockData.id].stock_slider_changed = false
+                self.view[charData.name][stockData.id].infinite_checkbox = false
+                self.view[charData.name][stockData.id].infinite_checkbox_changed = false
+
+                -- randomizer settings
+                self.controller[charData.name][stockData.id].randomizer_enabled = false
+                self.controller[charData.name][stockData.id].bounds_enabled = false
+                self.controller[charData.name][stockData.id].lower_bound = stockData.minValue
+                self.controller[charData.name][stockData.id].upper_bound = stockData.maxValue
+            end
+        end
+    end
+end
+
+function UniqueGaugeParam:update()
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+    local char_datas
+    if char_id1 == char_id2 then
+        char_datas = {module.data.UniqueCharData[char_id1]}
+    else
+        char_datas = {module.data.UniqueCharData[char_id1], module.data.UniqueCharData[char_id2]}
+    end
+
+    local need_refresh = false
+    -- unique gauge parameter update logic
+    for index, char_data in pairs(char_datas) do
+        if char_data then
+            -- update timers
+            if char_data.timers then
+                for _, timerData in pairs(char_data.timers) do
+                    local ui_timer = self.view[char_data.name][timerData.id]
+                    if ui_timer.timer_combo_changed then
+                        -- set the unique gauge data based on the selected value
+                        self.model[timerData.id] = ui_timer.timer_combo_value - 1
+                        need_refresh = true
+                    end
+                    -- add logic for the timer later
+                    if timerData.install == true and ui_timer.timer_combo_value == 2 then
+                        -- set the installed start value somewhere
+                        liveData = nil
+                        if index == 1 then
+                            liveData = module.data.live_P1
+                        else
+                            liveData = module.data.live_P2
+                        end
+                        if module.data.sGame.stage_timer == 1 then
+                            liveData.style_timer = self.controller[char_data.name][timerData.id].installed_start_value
+                        end
+                    end
+                    if ui_timer.installed_start_value_changed then
+                        need_refresh = true
+                    end
+                end
+            end
+
+            -- update stocks
+            if char_data.stocks then
+                for _, stockData in pairs(char_data.stocks) do
+                    local ui_stock = self.view[char_data.name][stockData.id]
+                    if ui_stock.infinite_checkbox_changed then
+                        if ui_stock.infinite_checkbox then
+                            self.model[stockData.id] = 7
+                        else
+                            self.model[stockData.id] = ui_stock.stock_slider
+                        end
+                        need_refresh = true
+                    end
+                    if ui_stock.stock_slider_changed then
+                        self.model[stockData.id] = ui_stock.stock_slider
+                        need_refresh = true
+                    end
+                end
+            end
+        end
+    end
+    return need_refresh
+end
+
+function UniqueGaugeParam:randomize()
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+    local char_datas
+    if char_id1 == char_id2 then
+        char_datas = {module.data.UniqueCharData[char_id1]}
+    else
+        char_datas = {module.data.UniqueCharData[char_id1], module.data.UniqueCharData[char_id2]}
+    end
+
+    -- unique gauge parameter randomization logic
+    for _, char_data in pairs(char_datas) do
+        if char_data then
+            -- randomize timers
+            if char_data.timers then
+                for _, timerData in pairs(char_data.timers) do
+                    local controller = self.controller[char_data.name][timerData.id]
+                    if controller.randomizer_enabled then
+                        -- first calculate the disabled probability
+                        local rand_percentage = math.random(0, 100)
+                        if timerData.install == true and rand_percentage < controller.disabled_prob_percentage then
+                            -- set to disabled
+                            self.model[timerData.id] = 0
+                        else
+                            -- enable it
+                            self.model[timerData.id] = 1
+
+                            -- if it's an install timer, set the start value
+                            if timerData.install == true then
+                                -- randomize the timer starting value
+                                local lower_bound = 0
+                                local upper_bound = timerData.timerMaxValue
+                                if controller.bounds_enabled then
+                                    lower_bound = controller.lower_bound
+                                    upper_bound = controller.upper_bound
+                                end
+
+                                self.controller[char_data.name][timerData.id].installed_start_value =
+                                    math.random(lower_bound, upper_bound)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- randomize stocks
+            if char_data.stocks then
+                for _, stockData in pairs(char_data.stocks) do
+                    local controller = self.controller[char_data.name][stockData.id]
+                    if controller.randomizer_enabled then
+                        local lower_bound = stockData.minValue
+                        local upper_bound = stockData.maxValue
+                        if controller.bounds_enabled then
+                            lower_bound = controller.lower_bound
+                            upper_bound = controller.upper_bound
+                        end
+                        local random_value = math.random(lower_bound, upper_bound)
+                        self.model[stockData.id] = random_value
+                    end
+                end
+            end
+        end
+    end
+end
+
+function UniqueGaugeParam:draw_ui()
+    local char_id1 = module.data.SelectMenu.PlayerDatas[0].FighterID
+    local char_id2 = module.data.SelectMenu.PlayerDatas[1].FighterID
+    local char_datas
+    if char_id1 == char_id2 then
+        char_datas = {module.data.UniqueCharData[char_id1]}
+    else
+        char_datas = {module.data.UniqueCharData[char_id1], module.data.UniqueCharData[char_id2]}
+    end
+
+    local any_installed_timer = false
+
+    for _, char_data in pairs(char_datas) do
+        if char_data then
+            imgui.text("Character: " .. char_data.name)
+            -- draw timers
+            if char_data.timers then
+                for _, timerData in pairs(char_data.timers) do
+                    if any_installed_timer then
+                        imgui.separator()
+                    end
+                    any_installed_timer = true
+
+                    local current_value = self.model[timerData.id]
+                    -- use stored timer ui values
+                    local ui_timer = self.view[char_data.name][timerData.id]
+                    local descriptor = timerData.descriptors[current_value + 1]
+                    imgui.text(timerData.name .. ": " .. descriptor)
+
+                    local controller = self.controller[char_data.name][timerData.id]
+
+                    if controller.randomizer_enabled then
+                        imgui.begin_disabled()
+                    end
+
+                    -- use stored slider value as current so it persists
+                    ui_timer.timer_combo_changed, ui_timer.timer_combo_value =
+                        imgui.combo(timerData.name .. " Value ", current_value + 1, timerData.descriptors)
+                    if timerData.install == true and current_value == 1 then
+                        -- installed timer UI elements
+                        ui_timer.installed_start_value_changed,
+                            self.controller[char_data.name][timerData.id].installed_start_value =
+                            imgui.slider_int(
+                            timerData.name .. " starting activation value",
+                            self.controller[char_data.name][timerData.id].installed_start_value,
+                            0,
+                            timerData.timerMaxValue
+                        )
+                    end
+
+                    if controller.randomizer_enabled then
+                        imgui.end_disabled()
+                    end
+
+                    if current_value ~= 2 then
+                        -- randomizer checkbox
+                        _, controller.randomizer_enabled =
+                            imgui.checkbox(
+                            "Toggle " .. timerData.name .. " Randomization",
+                            controller.randomizer_enabled
+                        )
+
+                        if controller.randomizer_enabled and timerData.install == true then
+                            -- randomizer disabled probability
+                            _, controller.disabled_prob_percentage =
+                                imgui.slider_int(
+                                "Probability (%) of " .. timerData.name .. " being disabled when randomized",
+                                controller.disabled_prob_percentage,
+                                0,
+                                100
+                            )
+
+                            -- bounds only enabled for installs with timer, no reason to have them otherwise
+                            if timerData.install == true then
+                                -- bounds enable checkbox
+                                _, controller.bounds_enabled =
+                                    imgui.checkbox(
+                                    "Enable Bounds for " .. timerData.name .. " Randomization",
+                                    controller.bounds_enabled
+                                )
+                                if controller.bounds_enabled then
+                                    -- show the bounds sliders
+                                    _, controller.lower_bound =
+                                        imgui.drag_int(
+                                        timerData.name .. " Randomization Lower Bound",
+                                        controller.lower_bound,
+                                        0.3,
+                                        0,
+                                        controller.upper_bound
+                                    )
+                                    _, controller.upper_bound =
+                                        imgui.drag_int(
+                                        timerData.name .. " Randomization Upper Bound",
+                                        controller.upper_bound,
+                                        0.3,
+                                        controller.lower_bound,
+                                        timerData.timerMaxValue
+                                    )
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- draw stocks
+            if char_data.stocks then
+                for _, stockData in pairs(char_data.stocks) do
+                    if any_installed_timer then
+                        imgui.separator()
+                    end
+                    any_installed_timer = true
+
+                    local current_value = self.model[stockData.id]
+                    -- check for value == 7 (infinite)
+                    local descriptor
+                    if current_value == 7 then
+                        descriptor = "Infinite"
+                    else
+                        descriptor = stockData.descriptors[current_value + 1]
+                    end
+                    -- use stored stock ui values
+                    local ui_stock = self.view[char_data.name][stockData.id]
+                    imgui.text(stockData.name .. ": " .. descriptor)
+
+                    local controller = self.controller[char_data.name][stockData.id]
+
+                    if controller.randomizer_enabled then
+                        imgui.begin_disabled()
+                    end
+
+                    if stockData.allowInfinite then
+                        ui_stock.infinite_checkbox_changed, ui_stock.infinite_checkbox =
+                            imgui.checkbox("Toggle Infinite " .. stockData.name, current_value == 7)
+                    end
+                    -- if infinite is enabled, don't show the slider
+                    if current_value ~= 7 then
+                        ui_stock.stock_slider_changed, ui_stock.stock_slider =
+                            imgui.slider_int(
+                            stockData.name .. " Value",
+                            current_value,
+                            stockData.minValue,
+                            stockData.maxValue
+                        )
+                        if not stockData.correspond then
+                            imgui.text_colored(
+                                "Warning: The values on the slider do not correspond to the ingame values, consult the '" ..
+                                    stockData.name .. ": #' value instead",
+                                0xFF00A9F9
+                            )
+                        end
+
+                        imgui.separator()
+                    end
+
+                    if controller.randomizer_enabled then
+                        imgui.end_disabled()
+                    end
+
+                    if current_value ~= 7 then
+                        -- randomizer checkbox
+                        _, controller.randomizer_enabled =
+                            imgui.checkbox(
+                            "Toggle " .. stockData.name .. " Randomization",
+                            controller.randomizer_enabled
+                        )
+
+                        if controller.randomizer_enabled then
+                            _, controller.bounds_enabled =
+                                imgui.checkbox(
+                                "Enable Bounds for " .. stockData.name .. " Randomization",
+                                controller.bounds_enabled
+                            )
+                            if controller.bounds_enabled then
+                                -- show the bounds sliders
+                                _, controller.lower_bound =
+                                    imgui.drag_int(
+                                    stockData.name .. " Randomization Lower Bound",
+                                    controller.lower_bound,
+                                    0.3,
+                                    stockData.minValue,
+                                    controller.upper_bound
+                                )
+                                _, controller.upper_bound =
+                                    imgui.drag_int(
+                                    stockData.name .. " Randomization Upper Bound",
+                                    controller.upper_bound,
+                                    0.3,
+                                    controller.lower_bound,
+                                    stockData.maxValue
+                                )
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if not any_installed_timer then
+        imgui.text_colored("Not available for these characters", 0xFF00A9F9)
+    end
+end
+
+--[[
+    Position parameters 
+]]
+module.data.PositionParametersData = require("TrainingModePlusScripts/PositionParametersData")
+
+--[[
     Module level logic
 ]]
 function module.init()
@@ -736,19 +1148,23 @@ function module.init()
     module.data.TrainingManager = sdk.get_managed_singleton("app.training.TrainingManager")
     module.data.TrainingData = module.data.TrainingManager:get_field("_tData")
     module.data.ParameterSetting = module.data.TrainingData:get_field("ParameterSetting")
+    module.data.SelectMenu = module.data.TrainingData:get_field("SelectMenu")
     module.data.tf_PS = module.data.TrainingManager._tfFuncs._entries[6]:get_field("value")
     local gBattle = sdk.find_type_definition("gBattle")
+    local sPlayer = gBattle:get_field("Player"):get_data(nil)
+    local cPlayer = sPlayer.mcPlayer
+    -- use sGame.stage_timer == 1 to check for the refresh (you can apply all the settings you want here and they won't get overwritten by the game at this point)
     module.data.sGame = gBattle:get_field("Game"):get_data(nil)
+    module.data.live_P1 = cPlayer[0]
+    module.data.live_P2 = cPlayer[1]
 
     -- initialize player parameters
     PlayerParam:init(module.data.ParameterSetting)
+    UniqueGaugeParam:init(module.data.ParameterSetting.UniqueData)
 end
 
 function module.on_frame()
     -- module logic goes here
-    local need_apply = false
-
-    need_apply = PlayerParam:update() or need_apply
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
@@ -756,11 +1172,22 @@ function module.on_frame()
     if request_randomizer then
         -- randomize parameters
         PlayerParam:randomize()
+        UniqueGaugeParam:randomize()
     end
+
+    local need_apply = false
+    local need_refresh = false
+
+    need_apply = PlayerParam:update() or need_apply
+    need_refresh = UniqueGaugeParam:update() or need_refresh
 
     -- apply the settings if needed
     if need_apply then
         sdk.call_object_func(module.data.tf_PS, "bApply")
+    end
+
+    if need_refresh then
+        module.data.TrainingManager._IsReqRefresh = true
     end
 end
 
@@ -769,6 +1196,10 @@ function module.draw_ui()
     if imgui.collapsing_header("Training Parameters") then
         -- player specific UI
         PlayerParam:draw_ui()
+        if imgui.tree_node("Unique Character Gauges") then
+            UniqueGaugeParam:draw_ui()
+            imgui.tree_pop()
+        end
     end
 end
 
