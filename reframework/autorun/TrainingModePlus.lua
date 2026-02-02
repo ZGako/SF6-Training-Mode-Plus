@@ -10,6 +10,7 @@ local imgui = imgui
 local TrainingManager = nil
 local TrainingStateChange = false
 local ShowScriptUI = true
+local refresh_requested = false
 
 -- require modules here
 -- Safely require modules so a broken module won't crash the entire script.
@@ -31,7 +32,8 @@ do
     -- fill this list with require paths (strings) or already-required module tables
     local to_load = {
         "TrainingModePlusScripts/GameSpeedPlus",
-        "TrainingModePlusScripts/TrainingParametersPlus"
+        -- "TrainingModePlusScripts/TrainingParametersPlus",
+        "TrainingModePlusScripts/TrainingSettingsAndRandomizer"
     }
 
     for _, entry in ipairs(to_load) do
@@ -66,7 +68,7 @@ re.on_frame(
 
         -- if we reach this point then we have the training manager
         -- we can now check if we are in training mode
-        if TrainingManager._TrainingState ~= 0 then
+        if TrainingManager._TrainingState ~= 0 and (TrainingManager._GameMode == 1 or TrainingManager._GameMode == 2) then
             -- look if the state just changed from not being in training mode to reaching training mode
             if not TrainingStateChange then
                 TrainingStateChange = true
@@ -88,6 +90,11 @@ re.on_frame(
                         end
                     end
                 end
+            end
+
+            if refresh_requested then
+                TrainingManager._IsReqRefresh = true
+                refresh_requested = false
             end
 
             -- modules on frame calls (guard nil functions)
@@ -115,7 +122,7 @@ re.on_frame(
                     imgui.spacing()
 
                     if imgui.button("Refresh Training Mode") then
-                        TrainingManager._IsReqRefresh = true
+                        refresh_requested = true
                     end
 
                     -- modules UI (guard nil functions)
@@ -142,6 +149,18 @@ re.on_frame(
         else
             if TrainingStateChange then
                 TrainingStateChange = false
+                log.debug("[TrainingModePlus] Exited Training Mode, resetting modules.")
+
+                -- on exit training mode calls (guard nil functions)
+                for _, module in ipairs(tmplus_modules) do
+                    if module == nil then
+                        -- skip
+                    else
+                        if type(module.on_exit_training_mode) == "function" then
+                            module.on_exit_training_mode()
+                        end
+                    end
+                end
             end
         end
     end
