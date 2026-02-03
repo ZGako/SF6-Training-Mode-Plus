@@ -3,11 +3,16 @@ local re = re
 local sdk = sdk
 local reframework = reframework
 local imgui = imgui
+local json = json
+
+-- key code for the '0' key to trigger randomization
+local windowsKeyCode = 0x30
 
 local module = {
     data = {},
     ui_active = false,
-    request_refresh = false
+    request_refresh = false,
+    request_randomizer = false
 }
 
 module.name = "Training Settings + Randomizer"
@@ -2231,6 +2236,14 @@ function module.init()
     UniqueGaugeParam:init(module.data.ParameterSetting.UniqueData)
     PositionalParam:init(module.data.SelectMenu)
 
+    -- load config file
+    local config_file = json.load_file("TrainingModePlus/TrainingSettingsAndRandomizer_Config.json")
+    if config_file ~= nil then
+        PlayerParam.controller = config_file.PlayerParam or PlayerParam.controller
+        UniqueGaugeParam.controller = config_file.UniqueGaugeParam or UniqueGaugeParam.controller
+        PositionalParam.controller = config_file.PositionalParam or PositionalParam.controller
+    end
+
     -- initialize refresh request flag
     module.request_refresh = false
     module.ui_active = false
@@ -2243,8 +2256,15 @@ function module.on_frame()
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
-    request_randomizer = module.data.TrainingManager._IsReqRefresh
-    if request_randomizer then
+
+    local request_randomizer_button = reframework:is_key_down(windowsKeyCode)
+
+    if module.request_randomizer == true then
+        request_randomizer = true
+        module.data.TrainingManager._IsReqRefresh = true
+    end
+
+    if request_randomizer and module.data.TrainingManager._IsReqRefresh == true then
         -- randomize parameters
         PlayerParam:randomize()
         UniqueGaugeParam:randomize()
@@ -2273,8 +2293,11 @@ end
 
 function module.draw_ui()
     module.ui_active = false
+
     -- module level UI
     if imgui.collapsing_header("Training Parameters") then
+        module.request_randomizer = imgui.button("Refresh and Randomize")
+
         -- player specific UI
         PlayerParam:draw_ui()
         if imgui.tree_node("Unique Character Gauges") then
@@ -2286,6 +2309,17 @@ function module.draw_ui()
             imgui.tree_pop()
         end
     end
+end
+
+function module.on_exit_training_mode()
+    -- save the config
+    config_file = {
+        PlayerParam = PlayerParam.controller,
+        UniqueGaugeParam = UniqueGaugeParam.controller,
+        PositionalParam = PositionalParam.controller
+    }
+
+    json.dump_file("TrainingModePlus/TrainingSettingsAndRandomizer_Config.json", config_file)
 end
 
 return module
