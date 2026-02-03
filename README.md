@@ -29,13 +29,13 @@ REframework mod for SF6 to expand the training mode functionality
     - [x] Set midpoint between characters, then use relative player distance
     - [x] Set one character's position, and then based on relative player distance position the other
   - [x] Advanced Unique Character Gauges - For characters with install level 2s, start with a specific amount of gauge left (CONFIRM FEASABILITY FIRST)
-- [ ] Randomizer for training mode parameters - These persist between resets - Allow for randomization options of the following parameters:
-  - [ ] Health - Allow choice of interval (to have more guaranteed variety) - Allow choice of Upper and Lower bound.
-  - [ ] Drive - Choice of interval (Including entire stock) or smaller - Allow for upper and lower bound.
-  - [ ] Super - Choice of interval (Including entire stock) or smaller - Allow for upper and lower bound.
-  - [ ] Relative Player Distance - Allow between discrete choices presented above or randomizing the unit value - Allow upper and lower bounds - Allow intervals for unit change.
-  - [ ] Player Position - Upper and Lower bounds - Choice between midpoint fulcrum or player fulcrum (player closest to edge probably) regarding player distance - Allow interval - Have presets with bounds and fulcrum so that one can choose LEFT - CENTER - RIGHT and have it work (or have the discrete 1/6th values instead)
-  - [ ] Unique Character Settings - Allow bounds were it makes sense - Enable starting gauge randomization if it makes sense - Stock randomization
+- [x] Randomizer for training mode parameters - These persist between resets - Allow for randomization options of the following parameters:
+  - [x] Health - Allow choice of interval (to have more guaranteed variety) - Allow choice of Upper and Lower bound.
+  - [x] Drive - Choice of interval (Including entire stock) or smaller - Allow for upper and lower bound.
+  - [x] Super - Choice of interval (Including entire stock) or smaller - Allow for upper and lower bound.
+  - [x] Relative Player Distance - Allow between discrete choices presented above or randomizing the unit value - Allow upper and lower bounds - Allow intervals for unit change.
+  - [x] Player Position - Upper and Lower bounds - Choice between midpoint fulcrum or player fulcrum (player closest to edge probably) regarding player distance - Allow interval - Have presets with bounds and fulcrum so that one can choose LEFT - CENTER - RIGHT and have it work (or have the discrete 1/6th values instead)
+  - [x] Unique Character Settings - Allow bounds were it makes sense - Enable starting gauge randomization if it makes sense - Stock randomization
 - [ ] Exporting and Importing character recordings - Sets of recordings also possible
   - [ ] Exporting menu allows for recording selection for set export - Allow for naming of files
   - [ ] Importing menu allows to also only importing single recordings of sets (they'll be separate files anyways)
@@ -47,7 +47,3 @@ REframework mod for SF6 to expand the training mode functionality
 - [ ] Export save state from recording (might even be better to make it a fake savestate so you can use it as a basis for a randomizer drill)
 - [ ] Mod the ingame UI and implement everything/partially there
 - [ ] Ultra Advanced Relative Player Distance - Have a "setup" mode where the player can visually tune the distance before "confirming it" for the relative values
-
-## Project Structure
-
-TODO

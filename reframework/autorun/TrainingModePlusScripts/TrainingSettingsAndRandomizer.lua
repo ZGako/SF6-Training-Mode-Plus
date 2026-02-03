@@ -12,8 +12,14 @@ local module = {
     data = {},
     ui_active = false,
     request_refresh = false,
-    request_randomizer = false
+    request_randomizer = false,
+    hotkeys = {
+        ["request_randomizer"] = "Select",
+        ["request_randomizer_$"] = "L3"
+    }
 }
+
+local Hotkey = require("Hotkeys/Hotkeys")
 
 module.name = "Training Settings + Randomizer"
 module.description =
@@ -2242,22 +2248,29 @@ function module.init()
         PlayerParam.controller = config_file.PlayerParam or PlayerParam.controller
         UniqueGaugeParam.controller = config_file.UniqueGaugeParam or UniqueGaugeParam.controller
         PositionalParam.controller = config_file.PositionalParam or PositionalParam.controller
+        module.hotkeys = config_file.Hotkeys or module.hotkeys
     end
 
     -- initialize refresh request flag
     module.request_refresh = false
     module.ui_active = false
+
+    -- initialize the hotkeys
+    Hotkey.setup_hotkeys(module.hotkeys, module.default_hotkeys)
 end
 
 function module.on_frame()
     -- module logic goes here
     local need_apply = false
     local need_refresh = false
+    request_randomizer = false
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
 
-    local request_randomizer_button = reframework:is_key_down(windowsKeyCode)
+    module.request_randomizer = module.request_randomizer or Hotkey.check_hotkey("request_randomizer", nil, true)
+
+    request_randomizer = reframework:is_key_down(windowsKeyCode)
 
     if module.request_randomizer == true then
         request_randomizer = true
@@ -2297,6 +2310,12 @@ function module.draw_ui()
     -- module level UI
     if imgui.collapsing_header("Training Parameters") then
         module.request_randomizer = imgui.button("Refresh and Randomize")
+        imgui.same_line()
+        local hotkeyChanged = Hotkey.hotkey_setter("request_randomizer", nil, "Hotkey")
+
+        if hotkeyChanged then
+            Hotkey.update_hotkey_table(module.hotkeys)
+        end
 
         -- player specific UI
         PlayerParam:draw_ui()
@@ -2316,7 +2335,8 @@ function module.on_exit_training_mode()
     config_file = {
         PlayerParam = PlayerParam.controller,
         UniqueGaugeParam = UniqueGaugeParam.controller,
-        PositionalParam = PositionalParam.controller
+        PositionalParam = PositionalParam.controller,
+        Hotkeys = module.hotkeys
     }
 
     json.dump_file("TrainingModePlus/TrainingSettingsAndRandomizer_Config.json", config_file)
