@@ -4,6 +4,10 @@ REframework mod for SF6 to expand the training mode functionality
 
 ## Features and notes
 
+Requires reframework to work.
+
+Required dependency: https://github.com/alphazolam/_ScriptCore/tree/SILVER-Dev
+
 #### Short term goals
 
 - [x] Game Speed - Allow control ranging from 50% to 150% at 10% increments.

@@ -5,14 +5,12 @@ local reframework = reframework
 local imgui = imgui
 local json = json
 
--- key code for the '0' key to trigger randomization
-local windowsKeyCode = 0x30
-
 local module = {
     data = {},
     ui_active = false,
     request_refresh = false,
     request_randomizer = false,
+    -- this is the default value, once you override it the config will save the new value
     hotkeys = {
         ["request_randomizer"] = "Select",
         ["request_randomizer_$"] = "L3"
@@ -20,6 +18,8 @@ local module = {
 }
 
 local Hotkey = require("Hotkeys/Hotkeys")
+
+hotkeys_available = Hotkey ~= nil
 
 module.name = "Training Settings + Randomizer"
 module.description =
@@ -2255,33 +2255,31 @@ function module.init()
     module.request_refresh = false
     module.ui_active = false
 
-    -- initialize the hotkeys
-    Hotkey.setup_hotkeys(module.hotkeys, module.default_hotkeys)
+    if hotkeys_available then
+        -- initialize the hotkeys
+        Hotkey.setup_hotkeys(module.hotkeys, module.default_hotkeys)
+    end
 end
 
 function module.on_frame()
     -- module logic goes here
     local need_apply = false
     local need_refresh = false
-    request_randomizer = false
+    local request_randomizer = false
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
-
-    module.request_randomizer = module.request_randomizer or Hotkey.check_hotkey("request_randomizer", nil, true)
-
-    request_randomizer = reframework:is_key_down(windowsKeyCode)
-
-    if module.request_randomizer == true then
-        request_randomizer = true
-        module.data.TrainingManager._IsReqRefresh = true
+    if hotkeys_available then
+        module.request_randomizer = module.request_randomizer or Hotkey.check_hotkey("request_randomizer", nil, true)
     end
 
-    if request_randomizer and module.data.TrainingManager._IsReqRefresh == true then
+    if module.request_randomizer then
         -- randomize parameters
         PlayerParam:randomize()
         UniqueGaugeParam:randomize()
         need_refresh = PositionalParam:randomize() or need_refresh
+
+        need_refresh = true
     end
 
     need_apply = PlayerParam:update() or need_apply
@@ -2310,11 +2308,14 @@ function module.draw_ui()
     -- module level UI
     if imgui.collapsing_header("Training Parameters") then
         module.request_randomizer = imgui.button("Refresh and Randomize")
-        imgui.same_line()
-        local hotkeyChanged = Hotkey.hotkey_setter("request_randomizer", nil, "Hotkey")
 
-        if hotkeyChanged then
-            Hotkey.update_hotkey_table(module.hotkeys)
+        if hotkeys_available then
+            imgui.same_line()
+            local hotkeyChanged = Hotkey.hotkey_setter("request_randomizer", nil, "Hotkey")
+
+            if hotkeyChanged then
+                Hotkey.update_hotkey_table(module.hotkeys)
+            end
         end
 
         -- player specific UI
