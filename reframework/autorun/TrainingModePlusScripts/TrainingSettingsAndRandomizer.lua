@@ -1168,6 +1168,7 @@ function PositionalParam:init(SelectMenuData)
     -- controller encompasses most settings as they don't translate well to the ingame parameters
     self.controller.relative_distance = {}
     self.controller.screen_position = {}
+    self.controller.randomizer = {}
 
     -- relative distance
     self.controller.relative_distance.min =
@@ -1207,6 +1208,7 @@ function PositionalParam:init(SelectMenuData)
     ]]
     self.view.relative_distance = {}
     self.view.screen_position = {}
+    self.view.randomizer = {}
 
     -- relative distance
 
@@ -1231,6 +1233,29 @@ function PositionalParam:init(SelectMenuData)
     self.view.screen_position.show_position_warning = false
     self.view.screen_position.precise_distance_reference_previous_index =
         self.controller.screen_position.precise_distance_reference_index
+
+    --[[
+        randomizer variables
+    ]]
+    self.controller.randomizer.enabled_relative = false
+    self.controller.randomizer.relative_bounds_enabled = false
+    self.controller.randomizer.relative_lower_bound = self.controller.relative_distance.min
+    self.controller.randomizer.relative_upper_bound = self.controller.relative_distance.max
+    self.controller.randomizer.relative_lower_bound_discrete_index = 1
+    self.controller.randomizer.relative_upper_bound_discrete_index =
+        #module.data.PositionParametersData.preset_relative_distance_offsets.names
+
+    self.view.randomizer.relative_discrete_bounds_changed = false
+
+    self.controller.randomizer.enabled_screen = false
+    self.controller.randomizer.screen_bounds_enabled = false
+    self.controller.randomizer.screen_lower_bound = module.data.PositionParametersData.default_screen_position.min
+    self.controller.randomizer.screen_upper_bound = module.data.PositionParametersData.default_screen_position.max
+    self.controller.randomizer.screen_lower_bound_discrete = -6
+    self.controller.randomizer.screen_upper_bound_discrete = 6
+
+    self.view.randomizer.screen_discrete_bounds_changed = false
+    self.view.randomizer.screen_continuous_bounds_changed = false
 
     --[[
         HOOKS
@@ -1449,6 +1474,54 @@ function PositionalParam:update()
 
         self.view.screen_position.precise_distance_reference_previous_index =
             self.controller.screen_position.precise_distance_reference_index
+
+        -- convert the randomizer bounds as well
+        if self.controller.randomizer.screen_bounds_enabled then
+            local lower_fulcrum = 0.0
+            local upper_fulcrum = 0.0
+
+            -- get fulcrum positions based on previous reference
+            if previous_index == 1 then
+                -- absolute position
+                lower_fulcrum = self.controller.randomizer.screen_lower_bound
+                upper_fulcrum = self.controller.randomizer.screen_upper_bound
+            elseif previous_index == 2 then
+                -- distance from left corner
+                lower_fulcrum =
+                    self.controller.randomizer.screen_lower_bound +
+                    module.data.PositionParametersData.default_screen_position.min
+                upper_fulcrum =
+                    self.controller.randomizer.screen_upper_bound +
+                    module.data.PositionParametersData.default_screen_position.min
+            elseif previous_index == 3 then
+                -- distance from right corner
+                upper_fulcrum =
+                    module.data.PositionParametersData.default_screen_position.max -
+                    self.controller.randomizer.screen_lower_bound
+                lower_fulcrum =
+                    module.data.PositionParametersData.default_screen_position.max -
+                    self.controller.randomizer.screen_upper_bound
+            end
+
+            -- now convert to new reference
+            if self.controller.screen_position.precise_distance_reference_index == 1 then
+                -- absolute position
+                self.controller.randomizer.screen_lower_bound = lower_fulcrum
+                self.controller.randomizer.screen_upper_bound = upper_fulcrum
+            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+                -- distance from left corner
+                self.controller.randomizer.screen_lower_bound =
+                    lower_fulcrum - module.data.PositionParametersData.default_screen_position.min
+                self.controller.randomizer.screen_upper_bound =
+                    upper_fulcrum - module.data.PositionParametersData.default_screen_position.min
+            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+                -- distance from right corner
+                self.controller.randomizer.screen_upper_bound =
+                    module.data.PositionParametersData.default_screen_position.max - lower_fulcrum
+                self.controller.randomizer.screen_lower_bound =
+                    module.data.PositionParametersData.default_screen_position.max - upper_fulcrum
+            end
+        end
     end
 
     -- if the discrete starting-position reference slider changed, convert it to an absolute position value
@@ -1564,11 +1637,229 @@ function PositionalParam:update()
         end
     end
 
+    -- randomizer synchronize bounds
+    if self.view.randomizer.relative_discrete_bounds_changed == true then
+        -- synchronize precise bounds to discrete bounds
+        local lower_index = self.controller.randomizer.relative_lower_bound_discrete_index
+        local upper_index = self.controller.randomizer.relative_upper_bound_discrete_index
+
+        -- if either index is == max range, then we don't add by the minimum value, just just use the max
+
+        local lower_value
+        local upper_value
+
+        if lower_index ~= #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1 then
+            lower_value = module.data.PositionParametersData.preset_relative_distance_offsets.values[lower_index]
+        else
+            lower_value = self.controller.relative_distance.max - self.controller.relative_distance.min
+        end
+
+        if upper_index ~= #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1 then
+            upper_value = module.data.PositionParametersData.preset_relative_distance_offsets.values[upper_index]
+        else
+            upper_value = self.controller.relative_distance.max - self.controller.relative_distance.min
+        end
+
+        self.controller.randomizer.relative_lower_bound = self.controller.relative_distance.min + lower_value
+        self.controller.randomizer.relative_upper_bound = self.controller.relative_distance.min + upper_value
+    end
+
+    -- screen position bounds updating to match discrete/precise mode
+    if self.view.randomizer.screen_discrete_bounds_changed == true then
+        -- synchronize precise bounds to discrete bounds
+        local lower_discrete = self.controller.randomizer.screen_lower_bound_discrete
+        local upper_discrete = self.controller.randomizer.screen_upper_bound_discrete
+
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+
+        -- convert discrete to absolute positions
+        local lower_value = min_pos + ((lower_discrete + 6) / 12) * (max_pos - min_pos)
+        local upper_value = min_pos + ((upper_discrete + 6) / 12) * (max_pos - min_pos)
+
+        -- based on the current reference type, convert to appropriate stored value
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute position
+            self.controller.randomizer.screen_lower_bound = lower_value
+            self.controller.randomizer.screen_upper_bound = upper_value
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            self.controller.randomizer.screen_lower_bound =
+                lower_value - module.data.PositionParametersData.default_screen_position.min
+            self.controller.randomizer.screen_upper_bound =
+                upper_value - module.data.PositionParametersData.default_screen_position.min
+        elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+            -- distance from right corner (remember to invert)
+            -- distance from right corner
+            self.controller.randomizer.screen_upper_bound =
+                module.data.PositionParametersData.default_screen_position.max - lower_value
+            self.controller.randomizer.screen_lower_bound =
+                module.data.PositionParametersData.default_screen_position.max - upper_value
+        end
+    end
+
+    -- screen position precise bounds changed
+    if self.view.randomizer.screen_continuous_bounds_changed == true then
+        -- synchronize discrete bounds to precise bounds
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+
+        local lower_value
+        local upper_value
+
+        -- convert from stored value to absolute position
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute position
+            lower_value = self.controller.randomizer.screen_lower_bound
+            upper_value = self.controller.randomizer.screen_upper_bound
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            lower_value =
+                self.controller.randomizer.screen_lower_bound +
+                module.data.PositionParametersData.default_screen_position.min
+            upper_value =
+                self.controller.randomizer.screen_upper_bound +
+                module.data.PositionParametersData.default_screen_position.min
+        elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+            -- distance from right corner
+            upper_value =
+                module.data.PositionParametersData.default_screen_position.max -
+                self.controller.randomizer.screen_lower_bound
+            lower_value =
+                module.data.PositionParametersData.default_screen_position.max -
+                self.controller.randomizer.screen_upper_bound
+        end
+
+        -- convert absolute positions to discrete values
+        self.controller.randomizer.screen_lower_bound_discrete =
+            math.floor(((lower_value - min_pos) / (max_pos - min_pos)) * 12 + 0.5) - 6
+        self.controller.randomizer.screen_upper_bound_discrete =
+            math.floor(((upper_value - min_pos) / (max_pos - min_pos)) * 12 + 0.5) - 6
+    end
+
     return need_refresh
 end
 
 function PositionalParam:randomize()
     -- positional parameter randomization logic
+
+    need_refresh = false
+
+    -- randomize relative distance
+    if self.controller.randomizer.enabled_relative then
+        need_refresh = true
+
+        if self.controller.relative_distance.discrete_enabled then
+            -- discrete preset randomization
+
+            local lower_index = 1
+            local upper_index = #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1
+
+            if self.controller.randomizer.relative_bounds_enabled then
+                lower_index = self.controller.randomizer.relative_lower_bound_discrete_index
+                upper_index = self.controller.randomizer.relative_upper_bound_discrete_index
+            end
+
+            local random_index = math.random(lower_index, upper_index)
+            self.controller.relative_distance.discrete_relative_distance_preset_index = random_index
+
+            -- set the actual relative distance value
+            if random_index ~= #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1 then
+                self.controller.relative_distance.relative_distance =
+                    self.controller.relative_distance.min +
+                    module.data.PositionParametersData.preset_relative_distance_offsets.values[random_index]
+            else
+                self.controller.relative_distance.relative_distance = self.controller.relative_distance.max
+            end
+        else
+            -- precise randomization
+            local lower_bound = math.floor(self.controller.relative_distance.min)
+            local upper_bound = math.floor(self.controller.relative_distance.max)
+
+            if self.controller.randomizer.relative_bounds_enabled then
+                lower_bound = math.floor(self.controller.randomizer.relative_lower_bound)
+                upper_bound = math.floor(self.controller.randomizer.relative_upper_bound)
+            end
+
+            local random_value = math.random(lower_bound, upper_bound)
+            self.controller.relative_distance.relative_distance = random_value
+        end
+    end
+
+    if self.controller.randomizer.enabled_screen then
+        need_refresh = true
+
+        if self.controller.screen_position.discrete_screen_position then
+            -- discrete preset randomization
+            local lower_value = -6
+            local upper_value = 6
+
+            if self.controller.randomizer.screen_bounds_enabled then
+                lower_value = self.controller.randomizer.screen_lower_bound_discrete
+                upper_value = self.controller.randomizer.screen_upper_bound_discrete
+            end
+
+            local random_value = math.random(lower_value, upper_value)
+            self.controller.screen_position.discrete_screen_position_value = random_value
+
+            -- convert to absolute position
+            local min_pos = module.data.PositionParametersData.default_screen_position.min
+            local max_pos = module.data.PositionParametersData.default_screen_position.max
+            local fulcrum_position = min_pos + ((random_value + 6) / 12) * (max_pos - min_pos)
+            -- store controller.screen_position.position according to the currently selected reference type
+            -- 1 = absolute position, 2 = distance from left corner, 3 = distance from right corner
+            if self.controller.screen_position.precise_distance_reference_index == 1 then
+                -- absolute
+                self.controller.screen_position.position = fulcrum_position
+            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+                -- distance from left corner
+                self.controller.screen_position.position = fulcrum_position - min_pos
+            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+                -- distance from right corner
+                self.controller.screen_position.position = max_pos - fulcrum_position
+            end
+        else
+            -- precise randomization
+            local lower_bound = module.data.PositionParametersData.default_screen_position.min
+            local upper_bound = module.data.PositionParametersData.default_screen_position.max
+
+            if self.controller.randomizer.screen_bounds_enabled then
+                lower_bound = self.controller.randomizer.screen_lower_bound
+                upper_bound = self.controller.randomizer.screen_upper_bound
+            end
+
+            local random_value = math.random(math.floor(lower_bound), math.floor(upper_bound))
+            self.controller.screen_position.position = random_value
+
+            -- update the discrete slider value so the UI matches the computed fulcrum position
+            local fulcrum_position = 0.0
+            if self.controller.screen_position.precise_distance_reference_index == 1 then
+                -- absolute position
+                fulcrum_position = self.controller.screen_position.position
+            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+                -- distance from left corner
+                fulcrum_position =
+                    self.controller.screen_position.position +
+                    module.data.PositionParametersData.default_screen_position.min
+            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+                -- distance from right corner
+                fulcrum_position =
+                    module.data.PositionParametersData.default_screen_position.max -
+                    self.controller.screen_position.position
+            end
+
+            self.controller.screen_position.discrete_screen_position_value =
+                math.floor(
+                ((fulcrum_position - module.data.PositionParametersData.default_screen_position.min) /
+                    (module.data.PositionParametersData.default_screen_position.max -
+                        module.data.PositionParametersData.default_screen_position.min)) *
+                    12 +
+                    0.5
+            ) - 6
+        end
+    end
+
+    return need_refresh
 end
 
 function PositionalParam:draw_ui()
@@ -1583,6 +1874,11 @@ function PositionalParam:draw_ui()
         self.controller.relative_distance.discrete_relative_distance_enabled_changed,
             self.controller.relative_distance.discrete_enabled =
             imgui.checkbox("Use Preset Relative Distances", self.controller.relative_distance.discrete_enabled)
+
+        -- randomizer
+        if self.controller.randomizer.enabled_relative then
+            imgui.begin_disabled()
+        end
 
         if self.controller.relative_distance.discrete_enabled then
             -- combo picker for preset relative distances
@@ -1611,6 +1907,102 @@ function PositionalParam:draw_ui()
             end
         end
 
+        if self.controller.randomizer.enabled_relative then
+            imgui.end_disabled()
+        end
+
+        -- randomizer checkbox
+        _, self.controller.randomizer.enabled_relative =
+            imgui.checkbox("Toggle Relative Distance Randomization", self.controller.randomizer.enabled_relative)
+
+        if self.controller.randomizer.enabled_relative then
+            _, self.controller.randomizer.relative_bounds_enabled =
+                imgui.checkbox(
+                "Enable Bounds for Relative Distance Randomization",
+                self.controller.randomizer.relative_bounds_enabled
+            )
+            if self.controller.randomizer.relative_bounds_enabled then
+                -- depending on the discrete/precise mode, show the appropriate bound controls
+                if self.controller.relative_distance.discrete_enabled then
+                    -- discrete preset bounds
+                    self.view.randomizer.relative_discrete_bounds_changed = false
+
+                    -- for the discrete case, we only show a subset of the presets that fit within the current indices
+                    local lower_bound_options = {}
+                    local upper_bound_options = {}
+                    -- maps from local combo index -> global preset index
+                    local lower_map = {}
+                    local upper_map = {}
+
+                    local full_names = module.data.PositionParametersData.preset_relative_distance_offsets.names
+
+                    -- build option lists and mapping tables. We need to translate the controller's
+                    -- stored global indices into local indices that match the reduced option lists
+                    local local_lower_selected = 1
+                    local local_upper_selected =
+                        #module.data.PositionParametersData.preset_relative_distance_offsets.names
+                    for i, name in ipairs(full_names) do
+                        if i <= self.controller.randomizer.relative_upper_bound_discrete_index then
+                            table.insert(lower_bound_options, name)
+                            table.insert(lower_map, i)
+                            if i == self.controller.randomizer.relative_lower_bound_discrete_index then
+                                local_lower_selected = #lower_bound_options
+                            end
+                        end
+                        if i >= self.controller.randomizer.relative_lower_bound_discrete_index then
+                            table.insert(upper_bound_options, name)
+                            table.insert(upper_map, i)
+                            if i == self.controller.randomizer.relative_upper_bound_discrete_index then
+                                local_upper_selected = #upper_bound_options
+                            end
+                        end
+                    end
+
+                    -- call imgui with local indices
+                    local changed_lower, new_local_lower =
+                        imgui.combo(
+                        "Relative Distance Randomization Lower Bound Preset",
+                        local_lower_selected,
+                        lower_bound_options
+                    )
+                    if changed_lower then
+                        -- map back to the global preset index
+                        self.controller.randomizer.relative_lower_bound_discrete_index = lower_map[new_local_lower]
+                        self.view.randomizer.relative_discrete_bounds_changed = true
+                    end
+
+                    local changed_upper, new_local_upper =
+                        imgui.combo(
+                        "Relative Distance Randomization Upper Bound Preset",
+                        local_upper_selected,
+                        upper_bound_options
+                    )
+                    if changed_upper then
+                        self.controller.randomizer.relative_upper_bound_discrete_index = upper_map[new_local_upper]
+                        self.view.randomizer.relative_discrete_bounds_changed = true
+                    end
+                else
+                    -- precise bounds
+                    _, self.controller.randomizer.relative_lower_bound =
+                        imgui.drag_float(
+                        "Relative Distance Randomization Lower Bound",
+                        self.controller.randomizer.relative_lower_bound,
+                        1,
+                        self.controller.relative_distance.min,
+                        self.controller.randomizer.relative_upper_bound
+                    )
+                    _, self.controller.randomizer.relative_upper_bound =
+                        imgui.drag_float(
+                        "Relative Distance Randomization Upper Bound",
+                        self.controller.randomizer.relative_upper_bound,
+                        1,
+                        self.controller.randomizer.relative_lower_bound,
+                        self.controller.relative_distance.max
+                    )
+                end
+            end
+        end
+
         imgui.separator()
 
         -- checkbox for enabling starting position adjustment
@@ -1629,6 +2021,8 @@ function PositionalParam:draw_ui()
                 }
             )
 
+            imgui.spacing()
+
             -- checkbox for discrete reference point adjustment toggle
             self.view.screen_position.discrete_screen_position_changed,
                 self.controller.screen_position.discrete_screen_position =
@@ -1638,6 +2032,11 @@ function PositionalParam:draw_ui()
             )
 
             if self.controller.screen_position.discrete_screen_position then
+                -- randomizer disabling
+                if self.controller.randomizer.enabled_screen then
+                    imgui.begin_disabled()
+                end
+
                 -- slider for discrete reference point
                 self.view.screen_position.discrete_screen_position_value_changed,
                     self.controller.screen_position.discrete_screen_position_value =
@@ -1649,6 +2048,10 @@ function PositionalParam:draw_ui()
                 )
                 if imgui.is_item_active() then
                     module.ui_active = true
+                end
+
+                if self.controller.randomizer.enabled_screen then
+                    imgui.end_disabled()
                 end
             else
                 -- combo picker for distance reference
@@ -1680,6 +2083,12 @@ function PositionalParam:draw_ui()
                         module.data.PositionParametersData.default_screen_position.max -
                         module.data.PositionParametersData.default_screen_position.min
                 end
+
+                -- randomizer disabling
+                if self.controller.randomizer.enabled_screen then
+                    imgui.begin_disabled()
+                end
+
                 self.view.screen_position.position_changed, self.controller.screen_position.position =
                     imgui.drag_float(
                     "Starting Position X",
@@ -1690,6 +2099,100 @@ function PositionalParam:draw_ui()
                 )
                 if imgui.is_item_active() then
                     module.ui_active = true
+                end
+
+                if self.controller.randomizer.enabled_screen then
+                    imgui.end_disabled()
+                end
+            end
+
+            -- randomizer checkbox
+            _, self.controller.randomizer.enabled_screen =
+                imgui.checkbox("Toggle Starting Position Randomization", self.controller.randomizer.enabled_screen)
+            if self.controller.randomizer.enabled_screen then
+                _, self.controller.randomizer.screen_bounds_enabled =
+                    imgui.checkbox(
+                    "Enable Bounds for Starting Position Randomization",
+                    self.controller.randomizer.screen_bounds_enabled
+                )
+
+                if self.controller.randomizer.screen_bounds_enabled then
+                    -- depending on the discrete/precise mode, show the appropriate bound controls
+                    if self.controller.screen_position.discrete_screen_position then
+                        -- discrete values from -6 to 6
+
+                        self.view.randomizer.screen_discrete_bounds_changed = false
+
+                        local changed = false
+
+                        changed, self.controller.randomizer.screen_lower_bound_discrete =
+                            imgui.drag_int(
+                            "Starting Position Randomization Lower Bound Discrete",
+                            self.controller.randomizer.screen_lower_bound_discrete,
+                            0.3,
+                            -6,
+                            self.controller.randomizer.screen_upper_bound_discrete
+                        )
+                        if changed then
+                            self.view.randomizer.screen_discrete_bounds_changed = true
+                        end
+
+                        changed, self.controller.randomizer.screen_upper_bound_discrete =
+                            imgui.drag_int(
+                            "Starting Position Randomization Upper Bound Discrete",
+                            self.controller.randomizer.screen_upper_bound_discrete,
+                            0.3,
+                            self.controller.randomizer.screen_lower_bound_discrete,
+                            6
+                        )
+                        if changed then
+                            self.view.randomizer.screen_discrete_bounds_changed = true
+                        end
+                    else
+                        -- precise bounds
+                        -- starting position bounds
+                        local starting_position_min = 0.0
+                        local starting_position_max = 0.0
+                        if self.controller.screen_position.precise_distance_reference_index == 1 then
+                            -- absolute position
+                            starting_position_min = module.data.PositionParametersData.default_screen_position.min
+                            starting_position_max = module.data.PositionParametersData.default_screen_position.max
+                        else
+                            -- distance from a corner
+                            starting_position_min = 0.0
+                            starting_position_max =
+                                module.data.PositionParametersData.default_screen_position.max -
+                                module.data.PositionParametersData.default_screen_position.min
+                        end
+
+                        self.view.randomizer.screen_continuous_bounds_changed = false
+
+                        local changed = false
+
+                        changed, self.controller.randomizer.screen_lower_bound =
+                            imgui.drag_float(
+                            "Starting Position Randomization Lower Bound",
+                            self.controller.randomizer.screen_lower_bound,
+                            1,
+                            starting_position_min,
+                            self.controller.randomizer.screen_upper_bound
+                        )
+                        if changed then
+                            self.view.randomizer.screen_continuous_bounds_changed = true
+                        end
+
+                        changed, self.controller.randomizer.screen_upper_bound =
+                            imgui.drag_float(
+                            "Starting Position Randomization Upper Bound",
+                            self.controller.randomizer.screen_upper_bound,
+                            1,
+                            self.controller.randomizer.screen_lower_bound,
+                            starting_position_max
+                        )
+                        if changed then
+                            self.view.randomizer.screen_continuous_bounds_changed = true
+                        end
+                    end
                 end
             end
 
@@ -1735,6 +2238,8 @@ end
 
 function module.on_frame()
     -- module logic goes here
+    local need_apply = false
+    local need_refresh = false
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
@@ -1743,11 +2248,8 @@ function module.on_frame()
         -- randomize parameters
         PlayerParam:randomize()
         UniqueGaugeParam:randomize()
-        PositionalParam:randomize()
+        need_refresh = PositionalParam:randomize() or need_refresh
     end
-
-    local need_apply = false
-    local need_refresh = false
 
     need_apply = PlayerParam:update() or need_apply
     need_refresh = UniqueGaugeParam:update() or need_refresh
