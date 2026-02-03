@@ -5,7 +5,9 @@ local reframework = reframework
 local imgui = imgui
 
 local module = {
-    data = {}
+    data = {},
+    ui_active = false,
+    request_refresh = false
 }
 
 module.name = "Training Settings + Randomizer"
@@ -980,6 +982,9 @@ function UniqueGaugeParam:draw_ui()
                             0,
                             timerData.timerMaxValue
                         )
+                        if imgui.is_item_active() then
+                            module.ui_active = true
+                        end
                     end
 
                     if controller.randomizer_enabled then
@@ -1140,6 +1145,564 @@ end
 ]]
 module.data.PositionParametersData = require("TrainingModePlusScripts/PositionParametersData")
 
+local PositionalParam = {
+    model = {},
+    view = {},
+    controller = {}
+}
+
+function PositionalParam:init(SelectMenuData)
+    -- positional parameter initialization
+    self.model = SelectMenuData
+
+    -- determine current character ids from the passed SelectMenuData
+    local char_id1 = SelectMenuData.PlayerDatas[0].FighterID
+    local char_id2 = SelectMenuData.PlayerDatas[1].FighterID
+    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+    local total_offset = offset1 + offset2
+
+    --[[
+        controller variables
+    ]]
+    -- controller encompasses most settings as they don't translate well to the ingame parameters
+    self.controller.relative_distance = {}
+    self.controller.screen_position = {}
+
+    -- relative distance
+    self.controller.relative_distance.min =
+        module.data.PositionParametersData.default_relative_distance.min + total_offset
+    -- account for character-specific offsets: subtract total_offset from the allowed max
+    self.controller.relative_distance.max =
+        module.data.PositionParametersData.default_relative_distance.max - total_offset
+
+    if SelectMenuData.StartLocation == 0 then
+        -- midscreen start
+        self.controller.relative_distance.relative_distance = 300
+        self.controller.relative_distance.discrete_relative_distance_preset_index = 6
+    else
+        -- corner start
+        self.controller.relative_distance.relative_distance = self.controller.relative_distance.min
+        self.controller.relative_distance.discrete_relative_distance_preset_index = 1
+    end
+
+    self.controller.relative_distance.enabled = false
+
+    self.controller.relative_distance.discrete_enabled = true
+
+    -- absolute screen position
+
+    self.controller.screen_position.enabled = false
+
+    self.controller.screen_position.position = 0.0
+    self.controller.screen_position.pivot_type_index = 1
+    -- discrete vs precise
+    self.controller.screen_position.discrete_screen_position = true
+    self.controller.screen_position.discrete_screen_position_value = 0
+    -- absolute, distance from left/distance from right
+    self.controller.screen_position.precise_distance_reference_index = 1
+
+    --[[
+        view variables
+    ]]
+    self.view.relative_distance = {}
+    self.view.screen_position = {}
+
+    -- relative distance
+
+    self.view.relative_distance.relative_distance_enabled_changed = false
+
+    self.view.relative_distance.discrete_relative_distance_enabled_changed = false
+
+    self.view.relative_distance.relative_distance_changed = false
+    self.view.relative_distance.discrete_relative_distance_preset_index_changed = false
+
+    self.view.relative_distance.old_starting_position = SelectMenuData.StartLocation
+
+    -- screen position
+    self.view.screen_position.enabled_changed = false
+
+    self.view.screen_position.position_changed = false
+    self.view.screen_position.pivot_type_index_changed = false
+    self.view.screen_position.discrete_screen_position_changed = false
+    self.view.screen_position.discrete_screen_position_value_changed = false
+    self.view.screen_position.precise_distance_reference_index_changed = false
+
+    self.view.screen_position.show_position_warning = false
+    self.view.screen_position.precise_distance_reference_previous_index =
+        self.controller.screen_position.precise_distance_reference_index
+
+    --[[
+        HOOKS
+    ]]
+    local function on_pre(args)
+        -- no pre logic needed
+    end
+    local function on_post(retval)
+        if not self.controller.relative_distance.enabled then
+            -- if its disabled
+            return
+        end
+
+        -- get the current characters to determine the offset to the relative distances
+        local char_id1 = self.model.PlayerDatas[0].FighterID
+        local char_id2 = self.model.PlayerDatas[1].FighterID
+
+        local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+        local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+        local total_offset = offset1 + offset2
+
+        -- if starting position adjustment is enabled, force custom start location
+        if self.controller.screen_position.enabled then
+            self.model.StartLocation = 3
+        else
+            if self.model.StartLocation ~= 3 then
+                -- if starting position adjustment is disabled, we just use the old starting position
+                self.view.relative_distance.old_starting_position = self.model.StartLocation
+            else
+                -- if starting position adjustment is disabled, we just use the old starting position
+                self.model.StartLocation = self.view.relative_distance.old_starting_position
+            end
+        end
+
+        if self.model.StartLocation == 0 then
+            -- center pivot
+            local center_position = (self.controller.relative_distance.relative_distance) / 2.0
+            self.model.PlayerDatas[0].ManualPosX = -center_position - (total_offset / 2.0)
+            self.model.PlayerDatas[1].ManualPosX = center_position + (total_offset / 2.0)
+        elseif self.model.StartLocation == 1 then
+            -- right side pivot
+            local right_position = module.data.PositionParametersData.default_screen_position.max
+            self.model.PlayerDatas[0].ManualPosX =
+                right_position - self.controller.relative_distance.relative_distance - total_offset
+            self.model.PlayerDatas[1].ManualPosX = right_position
+        elseif self.model.StartLocation == 2 then
+            -- left side pivot
+            local left_position = module.data.PositionParametersData.default_screen_position.min
+            self.model.PlayerDatas[0].ManualPosX = left_position
+            self.model.PlayerDatas[1].ManualPosX =
+                left_position + self.controller.relative_distance.relative_distance + total_offset
+        elseif self.model.StartLocation == 3 then
+            -- custom position pivot
+            local new_pos1
+            local new_pos2
+
+            -- first, calculate the position of the fulcrum based on the distance reference
+            local fulcrum_position = 0.0
+            if self.controller.screen_position.precise_distance_reference_index == 1 then
+                -- absolute position
+                fulcrum_position = self.controller.screen_position.position
+            elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+                -- distance from left corner
+                fulcrum_position =
+                    self.controller.screen_position.position +
+                    module.data.PositionParametersData.default_screen_position.min
+            elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+                -- distance from right corner
+                fulcrum_position =
+                    module.data.PositionParametersData.default_screen_position.max -
+                    self.controller.screen_position.position
+            end
+
+            -- calculate the new positions based on the pivot type
+            if self.controller.screen_position.pivot_type_index == 1 then
+                -- center pivot type
+                new_pos1 = fulcrum_position - (self.controller.relative_distance.relative_distance / 2.0)
+                new_pos2 = fulcrum_position + (self.controller.relative_distance.relative_distance / 2.0)
+            elseif self.controller.screen_position.pivot_type_index == 2 then
+                -- p1 player pivot type
+                new_pos1 = fulcrum_position
+                new_pos2 = fulcrum_position + self.controller.relative_distance.relative_distance
+            elseif self.controller.screen_position.pivot_type_index == 3 then
+                -- p2 player pivot type
+                new_pos1 = fulcrum_position - self.controller.relative_distance.relative_distance
+                new_pos2 = fulcrum_position
+            end
+
+            -- check screen bounds
+            local screen_min = module.data.PositionParametersData.default_screen_position.min
+            local screen_max = module.data.PositionParametersData.default_screen_position.max
+            if new_pos1 < screen_min then
+                new_pos1 = screen_min
+                new_pos2 = screen_min + self.controller.relative_distance.relative_distance
+            elseif new_pos2 > screen_max then
+                new_pos2 = screen_max
+                new_pos1 = screen_max - self.controller.relative_distance.relative_distance
+            end
+            self.model.PlayerDatas[0].ManualPosX = new_pos1 - (total_offset / 2.0)
+            self.model.PlayerDatas[1].ManualPosX = new_pos2 + (total_offset / 2.0)
+        end
+
+        self.model.StartLocation = 3
+    end
+
+    self.update_positioning_func = on_post
+
+    sdk.hook(
+        sdk.find_type_definition("app.training.tf_SelectMenu.FuncData"):get_method("ChangeStartLocationType"),
+        on_pre,
+        on_post
+    )
+end
+
+function PositionalParam:update()
+    -- positional parameter update logic
+    local need_refresh = false
+
+    -- get the current characters to determine the offset to the relative distances
+    local char_id1 = self.model.PlayerDatas[0].FighterID
+    local char_id2 = self.model.PlayerDatas[1].FighterID
+
+    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
+    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
+    local total_offset = offset1 + offset2
+
+    -- relative distance updates
+    self.controller.relative_distance.min =
+        module.data.PositionParametersData.default_relative_distance.min + total_offset
+    -- keep max within screen-space minus the total character offset
+    self.controller.relative_distance.max =
+        module.data.PositionParametersData.default_relative_distance.max - total_offset
+
+    self.controller.relative_distance.relative_distance =
+        math.max(
+        self.controller.relative_distance.min,
+        math.min(self.controller.relative_distance.relative_distance, self.controller.relative_distance.max)
+    )
+
+    -- relative distance changed
+    if self.view.relative_distance.relative_distance_enabled_changed then
+        need_refresh = true
+        if self.controller.relative_distance.enabled then
+            -- enable relative distance adjustments
+            self.view.relative_distance.old_starting_position = self.model.StartLocation
+        else
+            -- disable relative distance adjustments
+            -- revert to old starting position
+            self.model.StartLocation = self.view.relative_distance.old_starting_position
+        end
+    end
+
+    -- relative distance discrete preset values
+    if self.view.relative_distance.discrete_relative_distance_preset_index_changed then
+        need_refresh = true
+
+        -- if its the last value, we set the maximum (which we compute dynamically), otherwise we use the preset values in the table
+        if
+            self.controller.relative_distance.discrete_relative_distance_preset_index ==
+                #module.data.PositionParametersData.preset_relative_distance_offsets.values + 1
+         then
+            self.controller.relative_distance.relative_distance = self.controller.relative_distance.max
+        else
+            -- preset values are offsets from the minimum, add the min to get the absolute relative distance
+            self.controller.relative_distance.relative_distance =
+                self.controller.relative_distance.min +
+                module.data.PositionParametersData.preset_relative_distance_offsets.values[
+                    self.controller.relative_distance.discrete_relative_distance_preset_index
+                ]
+        end
+    end
+
+    if self.view.screen_position.enabled_changed then
+        need_refresh = true
+
+        if self.view.screen_position.enabled then
+            -- if we disabled starting position adjustment, restore the old starting position
+            self.view.relative_distance.old_starting_position = 3
+        else
+            -- when we disable starting position, we just default back to the middle of the screen, cuz it don't matter
+            self.view.relative_distance.old_starting_position = 0
+        end
+    end
+
+    -- for the screen position, when we change the reference type, we need to adjust the position value to match the new reference
+    if self.view.screen_position.precise_distance_reference_index_changed then
+        local previous_index = self.view.screen_position.precise_distance_reference_previous_index
+        local current_value = self.controller.screen_position.position
+
+        local fulcrum_position = 0.0
+        -- first, get the fulcrum position based on the previous reference
+        if previous_index == 1 then
+            -- absolute position
+            fulcrum_position = current_value
+        elseif previous_index == 2 then
+            -- distance from left corner
+            fulcrum_position = current_value + module.data.PositionParametersData.default_screen_position.min
+        elseif previous_index == 3 then
+            -- distance from right corner
+            fulcrum_position = module.data.PositionParametersData.default_screen_position.max - current_value
+        end
+
+        -- now, calculate the new starting position based on the new reference
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute position
+            self.controller.screen_position.position = fulcrum_position
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            self.controller.screen_position.position =
+                fulcrum_position - module.data.PositionParametersData.default_screen_position.min
+        elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+            -- distance from right corner
+            self.controller.screen_position.position =
+                module.data.PositionParametersData.default_screen_position.max - fulcrum_position
+        end
+
+        self.view.screen_position.precise_distance_reference_previous_index =
+            self.controller.screen_position.precise_distance_reference_index
+    end
+
+    -- if the discrete starting-position reference slider changed, convert it to an absolute position value
+    if self.view.screen_position.discrete_screen_position_value_changed then
+        need_refresh = true
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+        local discrete_value = self.controller.screen_position.discrete_screen_position_value
+        -- map -6..6 to min_pos..max_pos (13 steps -> denominator 12)
+        local fulcrum_position = min_pos + ((discrete_value + 6) / 12) * (max_pos - min_pos)
+
+        -- store controller.screen_position.position according to the currently selected reference type
+        -- 1 = absolute position, 2 = distance from left corner, 3 = distance from right corner
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute
+            self.controller.screen_position.position = fulcrum_position
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            self.controller.screen_position.position = fulcrum_position - min_pos
+        else
+            -- distance from right corner
+            self.controller.screen_position.position = max_pos - fulcrum_position
+        end
+    end
+
+    if self.view.screen_position.position_changed then
+        need_refresh = true
+        -- update the discrete slider value so the UI matches the computed fulcrum position
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+
+        local fulcrum_position = 0.0
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute position
+            fulcrum_position = self.controller.screen_position.position
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            fulcrum_position = self.controller.screen_position.position + min_pos
+        elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+            -- distance from right corner
+            fulcrum_position = max_pos - self.controller.screen_position.position
+        end
+
+        self.controller.screen_position.discrete_screen_position_value =
+            math.floor(((fulcrum_position - min_pos) / (max_pos - min_pos)) * 12 + 0.5) - 6
+    end
+
+    if self.view.screen_position.pivot_type_index_changed or self.view.relative_distance.relative_distance_changed then
+        need_refresh = true
+    end
+
+    -- verify screen position is within bounds
+    if
+        self.view.screen_position.position_changed or self.view.relative_distance.relative_distance_changed or
+            self.view.relative_distance.discrete_relative_distance_preset_index_changed or
+            self.view.screen_position.pivot_type_index_changed or
+            self.view.screen_position.discrete_screen_position_changed or
+            self.view.screen_position.discrete_screen_position_value_changed or
+            self.view.screen_position.precise_distance_reference_index_changed
+     then
+        -- check the calculated positions to see if they are within screen bounds
+        local screen_min = module.data.PositionParametersData.default_screen_position.min
+        local screen_max = module.data.PositionParametersData.default_screen_position.max
+
+        local new_pos1
+        local new_pos2
+
+        -- first, calculate the position of the fulcrum based on the distance reference
+        local fulcrum_position = 0.0
+        if self.controller.screen_position.precise_distance_reference_index == 1 then
+            -- absolute position
+            fulcrum_position = self.controller.screen_position.position
+        elseif self.controller.screen_position.precise_distance_reference_index == 2 then
+            -- distance from left corner
+            fulcrum_position =
+                self.controller.screen_position.position +
+                module.data.PositionParametersData.default_screen_position.min
+        elseif self.controller.screen_position.precise_distance_reference_index == 3 then
+            -- distance from right corner
+            fulcrum_position =
+                module.data.PositionParametersData.default_screen_position.max -
+                self.controller.screen_position.position
+        end
+
+        -- calculate the new positions based on the pivot type
+        if self.controller.screen_position.pivot_type_index == 1 then
+            -- center pivot type
+            new_pos1 = fulcrum_position - (self.controller.relative_distance.relative_distance / 2.0)
+            new_pos2 = fulcrum_position + (self.controller.relative_distance.relative_distance / 2.0)
+        elseif self.controller.screen_position.pivot_type_index == 2 then
+            -- p1 player pivot type
+            new_pos1 = fulcrum_position
+            new_pos2 = fulcrum_position + self.controller.relative_distance.relative_distance
+        elseif self.controller.screen_position.pivot_type_index == 3 then
+            -- p2 player pivot type
+            new_pos1 = fulcrum_position - self.controller.relative_distance.relative_distance
+            new_pos2 = fulcrum_position
+        end
+
+        -- update the discrete slider value so the UI matches the computed fulcrum position
+        local min_pos = module.data.PositionParametersData.default_screen_position.min
+        local max_pos = module.data.PositionParametersData.default_screen_position.max
+        local fulcrum_relative_position = fulcrum_position - min_pos
+        local relative_range = max_pos - min_pos
+        local discrete_value = math.floor((fulcrum_relative_position / relative_range) * 12 + 0.5) - 6
+        self.controller.screen_position.discrete_screen_position_value = discrete_value
+
+        -- check screen bounds
+        if new_pos1 < screen_min or new_pos2 > screen_max then
+            self.view.screen_position.show_position_warning = true
+        else
+            self.view.screen_position.show_position_warning = false
+        end
+    end
+
+    return need_refresh
+end
+
+function PositionalParam:randomize()
+    -- positional parameter randomization logic
+end
+
+function PositionalParam:draw_ui()
+    -- positional parameter UI logic
+
+    self.view.relative_distance.relative_distance_enabled_changed, self.controller.relative_distance.enabled =
+        imgui.checkbox("Enable Start Position Adjustment", self.controller.relative_distance.enabled)
+
+    imgui.separator()
+
+    if self.controller.relative_distance.enabled then
+        self.controller.relative_distance.discrete_relative_distance_enabled_changed,
+            self.controller.relative_distance.discrete_enabled =
+            imgui.checkbox("Use Preset Relative Distances", self.controller.relative_distance.discrete_enabled)
+
+        if self.controller.relative_distance.discrete_enabled then
+            -- combo picker for preset relative distances
+            self.view.relative_distance.discrete_relative_distance_preset_index_changed,
+                self.controller.relative_distance.discrete_relative_distance_preset_index =
+                imgui.combo(
+                "Relative Distance Presets",
+                self.controller.relative_distance.discrete_relative_distance_preset_index,
+                module.data.PositionParametersData.preset_relative_distance_offsets.names
+            )
+            imgui.text(
+                "Current Relative Distance: " ..
+                    string.format("%.2f", self.controller.relative_distance.relative_distance)
+            )
+        else
+            self.view.relative_distance.relative_distance_changed, self.controller.relative_distance.relative_distance =
+                imgui.drag_float(
+                "Relative Distance",
+                self.controller.relative_distance.relative_distance,
+                1.0,
+                self.controller.relative_distance.min,
+                self.controller.relative_distance.max
+            )
+            if imgui.is_item_active() then
+                module.ui_active = true
+            end
+        end
+
+        imgui.separator()
+
+        -- checkbox for enabling starting position adjustment
+        self.view.screen_position.enabled_changed, self.controller.screen_position.enabled =
+            imgui.checkbox("Enable Starting Position Adjustment", self.controller.screen_position.enabled)
+        if self.controller.screen_position.enabled then
+            -- combo picker for type of starting position
+            self.view.screen_position.pivot_type_index_changed, self.controller.screen_position.pivot_type_index =
+                imgui.combo(
+                "Starting Position Pivot Type",
+                self.controller.screen_position.pivot_type_index,
+                {
+                    "Center Pivot Point",
+                    "Left Player Position Pivot (P1 Side)",
+                    "Right Player Position Pivot (P2 Side)"
+                }
+            )
+
+            -- checkbox for discrete reference point adjustment toggle
+            self.view.screen_position.discrete_screen_position_changed,
+                self.controller.screen_position.discrete_screen_position =
+                imgui.checkbox(
+                "Use Discrete Starting Position Reference",
+                self.controller.screen_position.discrete_screen_position
+            )
+
+            if self.controller.screen_position.discrete_screen_position then
+                -- slider for discrete reference point
+                self.view.screen_position.discrete_screen_position_value_changed,
+                    self.controller.screen_position.discrete_screen_position_value =
+                    imgui.slider_int(
+                    "Starting Position Reference",
+                    self.controller.screen_position.discrete_screen_position_value,
+                    -6,
+                    6
+                )
+                if imgui.is_item_active() then
+                    module.ui_active = true
+                end
+            else
+                -- combo picker for distance reference
+                self.view.screen_position.precise_distance_reference_index_changed,
+                    self.controller.screen_position.precise_distance_reference_index =
+                    imgui.combo(
+                    "Starting Position Distance Reference",
+                    self.controller.screen_position.precise_distance_reference_index,
+                    {
+                        "Absolute Position",
+                        "Distance from Left Corner",
+                        "Distance from Right Corner"
+                    }
+                )
+
+                -- slider for starting position
+
+                -- if the reference is not absolute position, adjust the min/max accordingly
+                local starting_position_min = 0.0
+                local starting_position_max = 0.0
+                if self.controller.screen_position.precise_distance_reference_index == 1 then
+                    -- absolute position
+                    starting_position_min = module.data.PositionParametersData.default_screen_position.min
+                    starting_position_max = module.data.PositionParametersData.default_screen_position.max
+                else
+                    -- distance from a corner
+                    starting_position_min = 0.0
+                    starting_position_max =
+                        module.data.PositionParametersData.default_screen_position.max -
+                        module.data.PositionParametersData.default_screen_position.min
+                end
+                self.view.screen_position.position_changed, self.controller.screen_position.position =
+                    imgui.drag_float(
+                    "Starting Position X",
+                    self.controller.screen_position.position,
+                    1.0,
+                    starting_position_min,
+                    starting_position_max
+                )
+                if imgui.is_item_active() then
+                    module.ui_active = true
+                end
+            end
+
+            if self.view.screen_position.show_position_warning then
+                imgui.text_colored(
+                    "Warning: The current combination of relative distance and starting position would cause the character to go offscreen!\nThe position will be adjust to respect the relative position and screen bounds.",
+                    0xFF00A9F9
+                )
+            end
+        end
+    end
+end
+
 --[[
     Module level logic
 ]]
@@ -1150,6 +1713,8 @@ function module.init()
     module.data.ParameterSetting = module.data.TrainingData:get_field("ParameterSetting")
     module.data.SelectMenu = module.data.TrainingData:get_field("SelectMenu")
     module.data.tf_PS = module.data.TrainingManager._tfFuncs._entries[6]:get_field("value")
+    -- module.data.refresh_object =
+    --     module.data.TrainingManager._tfFuncs._entries[0]:get_field("value"):get_field("FuncList")
     local gBattle = sdk.find_type_definition("gBattle")
     local sPlayer = gBattle:get_field("Player"):get_data(nil)
     local cPlayer = sPlayer.mcPlayer
@@ -1161,6 +1726,11 @@ function module.init()
     -- initialize player parameters
     PlayerParam:init(module.data.ParameterSetting)
     UniqueGaugeParam:init(module.data.ParameterSetting.UniqueData)
+    PositionalParam:init(module.data.SelectMenu)
+
+    -- initialize refresh request flag
+    module.request_refresh = false
+    module.ui_active = false
 end
 
 function module.on_frame()
@@ -1173,6 +1743,7 @@ function module.on_frame()
         -- randomize parameters
         PlayerParam:randomize()
         UniqueGaugeParam:randomize()
+        PositionalParam:randomize()
     end
 
     local need_apply = false
@@ -1180,6 +1751,7 @@ function module.on_frame()
 
     need_apply = PlayerParam:update() or need_apply
     need_refresh = UniqueGaugeParam:update() or need_refresh
+    need_refresh = PositionalParam:update() or need_refresh
 
     -- apply the settings if needed
     if need_apply then
@@ -1187,17 +1759,28 @@ function module.on_frame()
     end
 
     if need_refresh then
+        module.request_refresh = true
+    end
+
+    if module.request_refresh == true and (module.ui_active == false) then
         module.data.TrainingManager._IsReqRefresh = true
+        PositionalParam:update_positioning_func()
+        module.request_refresh = false
     end
 end
 
 function module.draw_ui()
+    module.ui_active = false
     -- module level UI
     if imgui.collapsing_header("Training Parameters") then
         -- player specific UI
         PlayerParam:draw_ui()
         if imgui.tree_node("Unique Character Gauges") then
             UniqueGaugeParam:draw_ui()
+            imgui.tree_pop()
+        end
+        if imgui.tree_node("Positional Parameters") then
+            PositionalParam:draw_ui()
             imgui.tree_pop()
         end
     end
