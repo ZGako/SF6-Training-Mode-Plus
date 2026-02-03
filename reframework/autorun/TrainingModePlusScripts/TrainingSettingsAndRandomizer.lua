@@ -19,7 +19,7 @@ local module = {
 
 local Hotkey = require("Hotkeys/Hotkeys")
 
-hotkeys_available = Hotkey ~= nil
+local hotkeys_available = Hotkey ~= nil
 
 module.name = "Training Settings + Randomizer"
 module.description =
@@ -52,8 +52,8 @@ local PlayerParam = {
 }
 
 function PlayerParam:init_player(PlayerIndex, PlayerParams)
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
 
     -- copy the model
     self.model[PlayerIndex] = PlayerParams
@@ -135,9 +135,9 @@ function PlayerParam:init_player(PlayerIndex, PlayerParams)
 end
 
 function PlayerParam:update_player_parameters(PlayerIndex)
-    PlayerModel = self.model[PlayerIndex]
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
 
     local need_apply = false
 
@@ -228,9 +228,9 @@ function PlayerParam:randomize_player_health(PlayerIndex)
         return
     end
 
-    PlayerModel = self.model[PlayerIndex]
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
 
     -- randomize health logic
     local lower_bound = 0
@@ -248,9 +248,9 @@ function PlayerParam:randomize_player_drive(PlayerIndex)
         return
     end
 
-    PlayerModel = self.model[PlayerIndex]
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
 
     -- randomize drive logic
     if PlayerView.drive_type then
@@ -295,9 +295,9 @@ function PlayerParam:randomize_player_super(PlayerIndex)
         return
     end
 
-    PlayerModel = self.model[PlayerIndex]
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
 
     -- randomize super logic
     if PlayerView.super_type then
@@ -326,10 +326,10 @@ function PlayerParam:randomize_player_super(PlayerIndex)
 end
 
 function PlayerParam:draw_health_ui(PlayerIndex)
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
-    PlayerModel = self.model[PlayerIndex]
-    PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
 
     -- draw the health UI
 
@@ -381,10 +381,10 @@ function PlayerParam:draw_health_ui(PlayerIndex)
 end
 
 function PlayerParam:draw_drive_ui(PlayerIndex)
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
-    PlayerModel = self.model[PlayerIndex]
-    PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
 
     -- drive slider(s)
 
@@ -538,10 +538,10 @@ function PlayerParam:draw_drive_ui(PlayerIndex)
 end
 
 function PlayerParam:draw_super_ui(PlayerIndex)
-    PlayerView = self.view[PlayerIndex]
-    PlayerController = self.controller[PlayerIndex]
-    PlayerModel = self.model[PlayerIndex]
-    PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
+    local PlayerView = self.view[PlayerIndex]
+    local PlayerController = self.controller[PlayerIndex]
+    local PlayerModel = self.model[PlayerIndex]
+    local PlayerLabel = (PlayerIndex == "p1") and "Player 1" or "Player 2"
 
     -- super slider(s)
     if PlayerController.super_randomizer.enabled then
@@ -1754,7 +1754,7 @@ end
 function PositionalParam:randomize()
     -- positional parameter randomization logic
 
-    need_refresh = false
+    local need_refresh = false
 
     -- randomize relative distance
     if self.controller.randomizer.enabled_relative then
@@ -2280,6 +2280,7 @@ function module.on_frame()
         need_refresh = PositionalParam:randomize() or need_refresh
 
         need_refresh = true
+        module.request_randomizer = false
     end
 
     need_apply = PlayerParam:update() or need_apply
@@ -2300,11 +2301,10 @@ function module.on_frame()
         PositionalParam:update_positioning_func()
         module.request_refresh = false
     end
+    module.ui_active = false
 end
 
 function module.draw_ui()
-    module.ui_active = false
-
     -- module level UI
     if imgui.collapsing_header("Training Parameters") then
         module.request_randomizer = imgui.button("Refresh and Randomize")

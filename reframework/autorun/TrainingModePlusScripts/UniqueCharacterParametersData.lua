@@ -1,4 +1,4 @@
-UniqueCharData = {}
+local UniqueCharData = {}
 
 UniqueCharData[1] = {
     name = "Ryu",

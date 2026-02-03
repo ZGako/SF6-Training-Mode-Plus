@@ -1,4 +1,4 @@
-PositionalParametersData = {}
+local PositionalParametersData = {}
 
 -- Relative Position data
 PositionalParametersData.default_relative_distance = {
