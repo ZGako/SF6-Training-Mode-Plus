@@ -841,7 +841,7 @@ function UniqueGaugeParam:update()
                     -- add logic for the timer later
                     if timerData.install == true and ui_timer.timer_combo_value == 2 then
                         -- set the installed start value somewhere
-                        liveData = nil
+                        local liveData = nil
                         if index == 1 then
                             liveData = module.data.live_P1
                         else
@@ -1343,15 +1343,15 @@ function PositionalParam:init(SelectMenuData)
             -- calculate the new positions based on the pivot type
             if self.controller.screen_position.pivot_type_index == 1 then
                 -- center pivot type
-                new_pos1 = fulcrum_position - (self.controller.relative_distance.relative_distance / 2.0)
-                new_pos2 = fulcrum_position + (self.controller.relative_distance.relative_distance / 2.0)
+                new_pos1 = fulcrum_position - (self.controller.relative_distance.relative_distance + total_offset) / 2.0
+                new_pos2 = fulcrum_position + (self.controller.relative_distance.relative_distance + total_offset) / 2.0
             elseif self.controller.screen_position.pivot_type_index == 2 then
                 -- p1 player pivot type
                 new_pos1 = fulcrum_position
-                new_pos2 = fulcrum_position + self.controller.relative_distance.relative_distance
+                new_pos2 = fulcrum_position + self.controller.relative_distance.relative_distance + total_offset
             elseif self.controller.screen_position.pivot_type_index == 3 then
                 -- p2 player pivot type
-                new_pos1 = fulcrum_position - self.controller.relative_distance.relative_distance
+                new_pos1 = fulcrum_position - self.controller.relative_distance.relative_distance - total_offset
                 new_pos2 = fulcrum_position
             end
 
@@ -1360,13 +1360,13 @@ function PositionalParam:init(SelectMenuData)
             local screen_max = module.data.PositionParametersData.default_screen_position.max
             if new_pos1 < screen_min then
                 new_pos1 = screen_min
-                new_pos2 = screen_min + self.controller.relative_distance.relative_distance
+                new_pos2 = screen_min + self.controller.relative_distance.relative_distance + total_offset
             elseif new_pos2 > screen_max then
                 new_pos2 = screen_max
-                new_pos1 = screen_max - self.controller.relative_distance.relative_distance
+                new_pos1 = screen_max - self.controller.relative_distance.relative_distance - total_offset
             end
-            self.model.PlayerDatas[0].ManualPosX = new_pos1 - (total_offset / 2.0)
-            self.model.PlayerDatas[1].ManualPosX = new_pos2 + (total_offset / 2.0)
+            self.model.PlayerDatas[0].ManualPosX = new_pos1
+            self.model.PlayerDatas[1].ManualPosX = new_pos2
         end
 
         self.model.StartLocation = 3
@@ -2306,7 +2306,7 @@ end
 
 function module.draw_ui()
     -- module level UI
-    if imgui.collapsing_header("Training Parameters") then
+    if imgui.collapsing_header("Training Settings + Randomizer") then
         module.request_randomizer = imgui.button("Refresh and Randomize")
 
         if hotkeys_available then

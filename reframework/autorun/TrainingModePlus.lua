@@ -31,9 +31,9 @@ end
 do
     -- fill this list with require paths (strings) or already-required module tables
     local to_load = {
-        "TrainingModePlusScripts/GameSpeedPlus",
-        -- "TrainingModePlusScripts/TrainingParametersPlus",
-        "TrainingModePlusScripts/TrainingSettingsAndRandomizer"
+        "TrainingModePlusScripts/TrainingSettingsAndRandomizer",
+        "TrainingModePlusScripts/CharacterInfoDisplay",
+        "TrainingModePlusScripts/GameSpeedPlus"
     }
 
     for _, entry in ipairs(to_load) do
