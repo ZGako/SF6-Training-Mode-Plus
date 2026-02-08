@@ -11,6 +11,7 @@ local TrainingManager = nil
 local TrainingStateChange = false
 local ShowScriptUI = true
 local refresh_requested = false
+local mod_refresh_requested = false
 
 -- require modules here
 -- Safely require modules so a broken module won't crash the entire script.
@@ -68,7 +69,10 @@ re.on_frame(
 
         -- if we reach this point then we have the training manager
         -- we can now check if we are in training mode
-        if TrainingManager._TrainingState ~= 0 and (TrainingManager._GameMode == 1 or TrainingManager._GameMode == 2) then
+        if
+            TrainingManager._TrainingState ~= 0 and (TrainingManager._GameMode == 1 or TrainingManager._GameMode == 2) and
+                not mod_refresh_requested
+         then
             -- look if the state just changed from not being in training mode to reaching training mode
             if not TrainingStateChange then
                 TrainingStateChange = true
@@ -124,6 +128,17 @@ re.on_frame(
                     if imgui.button("Refresh Training Mode") then
                         refresh_requested = true
                     end
+                    imgui.spacing()
+
+                    if imgui.button("Refresh Modules") then
+                        mod_refresh_requested = true
+                    end
+
+                    imgui.same_line()
+                    imgui.text_colored(
+                        "If you experience any bugs, try pressing the 'Refresh Modules' button to refresh the mod.",
+                        0xFF00A9F9
+                    )
 
                     -- modules UI (guard nil functions)
                     for _, module in ipairs(tmplus_modules) do
@@ -149,6 +164,7 @@ re.on_frame(
         else
             if TrainingStateChange then
                 TrainingStateChange = false
+                mod_refresh_requested = false
                 log.debug("[TrainingModePlus] Exited Training Mode, resetting modules.")
 
                 -- on exit training mode calls (guard nil functions)

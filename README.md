@@ -4,7 +4,7 @@ Collection of training mode scripts that aim to improve your ability to use lab 
 
 # Installation
 
-Both [REframework](https://github.com/praydog/REFramework) and [\_ScriptCore](https://github.com/alphazolam/_ScriptCore/tree/SILVER-Dev) are required to run this mod.
+Both [REframework](https://github.com/praydog/REFramework) and [\_ScriptCore](https://www.nexusmods.com/streetfighter6/mods/3160) are required to run this mod.
 Suggested installation is to install this mod through the [fluffy mod manager](https://www.nexusmods.com/site/mods/818).
 
 # Features
