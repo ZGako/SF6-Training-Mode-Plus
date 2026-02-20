@@ -117,6 +117,9 @@ Have fun labbing!
 
 This is a list of features that I may or may not be feasible (I'll identify them as such), that I could potentially implement (contributions are also accepted):
 
+- [Feasible] Randomize health/drive/super/unique gauges upon loading a save state.
+- [Maybe feasible] Store savestates across sessions per character.
+- [Feasible but tedious] Add support for training "presets" where you set various things and stuff.
 - [Feasible] Exporting and Importing character recordings - Sets of recordings also possible
   - Exporting menu allows for recording selection for set export - Allow for naming of files
   - Importing menu allows to also only importing single recordings of sets (they'll be separate files anyways)

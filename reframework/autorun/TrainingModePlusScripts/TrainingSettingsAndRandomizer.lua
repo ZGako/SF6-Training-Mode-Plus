@@ -19,8 +19,6 @@ local module = {
 
 local Hotkey = require("Hotkeys/Hotkeys")
 
-local hotkeys_available = Hotkey ~= nil
-
 module.name = "Training Settings + Randomizer"
 module.description =
     "Module for adjusting training mode settings and randomizing them. Modifiable parameters include: Health, Drive, Super, Position, Unique Resources"
@@ -2255,10 +2253,7 @@ function module.init()
     module.request_refresh = false
     module.ui_active = false
 
-    if hotkeys_available then
-        -- initialize the hotkeys
-        Hotkey.setup_hotkeys(module.hotkeys, module.default_hotkeys)
-    end
+    Hotkey.setup_hotkeys(module.hotkeys, module.default_hotkeys)
 end
 
 function module.on_frame()
@@ -2269,9 +2264,7 @@ function module.on_frame()
 
     -- randomization logic
     -- for now just use this, later set this to a bind or something
-    if hotkeys_available then
-        module.request_randomizer = module.request_randomizer or Hotkey.check_hotkey("request_randomizer", nil, true)
-    end
+    module.request_randomizer = module.request_randomizer or Hotkey.check_hotkey("request_randomizer", nil, true)
 
     if module.request_randomizer then
         -- randomize parameters
@@ -2309,13 +2302,11 @@ function module.draw_ui()
     if imgui.collapsing_header("Training Settings + Randomizer") then
         module.request_randomizer = imgui.button("Refresh and Randomize")
 
-        if hotkeys_available then
-            imgui.same_line()
-            local hotkeyChanged = Hotkey.hotkey_setter("request_randomizer", nil, "Hotkey")
+        imgui.same_line()
+        local hotkeyChanged = Hotkey.hotkey_setter("request_randomizer", nil, "Hotkey")
 
-            if hotkeyChanged then
-                Hotkey.update_hotkey_table(module.hotkeys)
-            end
+        if hotkeyChanged then
+            Hotkey.update_hotkey_table(module.hotkeys)
         end
 
         -- player specific UI
