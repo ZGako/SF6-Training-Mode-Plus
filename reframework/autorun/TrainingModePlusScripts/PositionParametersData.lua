@@ -8,23 +8,47 @@ PositionalParametersData.default_relative_distance = {
 
 PositionalParametersData.character_relative_distance_offsets = {}
 
+-- minimum_distance_offset = added padding in front of the character increasing the minimum relative distance (used for the minimum and maximum settings)
+-- position_vs_relative_distance_offset = added offset which results in the relative_vs distance of the characters to be different from the distance in x positions, likely due to the x position being shifted behind the
+-- position used to calculate the relative_vs distance.
+
 -- honda
-PositionalParametersData.character_relative_distance_offsets[20] = 5.0
+PositionalParametersData.character_relative_distance_offsets[20] = {
+    minimum_distance_offset = 5.0,
+    position_vs_relative_distance_offset = 5.0
+}
 -- blanka
-PositionalParametersData.character_relative_distance_offsets[15] = 5.0
+PositionalParametersData.character_relative_distance_offsets[15] = {
+    minimum_distance_offset = 5.0,
+    position_vs_relative_distance_offset = 5.0
+}
 -- sagat
-PositionalParametersData.character_relative_distance_offsets[25] = 5.0
+PositionalParametersData.character_relative_distance_offsets[25] = {
+    minimum_distance_offset = 5.0,
+    position_vs_relative_distance_offset = 0
+}
 -- marisa
-PositionalParametersData.character_relative_distance_offsets[17] = 5.0
+PositionalParametersData.character_relative_distance_offsets[17] = {
+    minimum_distance_offset = 5.0,
+    position_vs_relative_distance_offset = 0
+}
 -- gief
-PositionalParametersData.character_relative_distance_offsets[6] = 8.0
+PositionalParametersData.character_relative_distance_offsets[6] = {
+    minimum_distance_offset = 8.0,
+    position_vs_relative_distance_offset = 8.0
+}
+-- alex
+PositionalParametersData.character_relative_distance_offsets[31] = {
+    minimum_distance_offset = 5.0,
+    position_vs_relative_distance_offset = 0
+}
 
 --[[
     Characters default min/max relative distance values
     
     Special characters offsets from these values
 
-    Gief = 10
+    Gief = 8
     Blanka/Sagat/Marisa/Honda = 5
 ]]
 -- absolute position data

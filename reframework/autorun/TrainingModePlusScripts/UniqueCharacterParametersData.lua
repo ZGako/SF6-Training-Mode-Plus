@@ -229,6 +229,52 @@ UniqueCharData[5] = {
     }
 }
 
+UniqueCharData[32] = {
+    name = "Ingrid",
+    stocks = {
+        {
+            id = "stock_0_032",
+            name = "Sun Crest",
+            maxValue = 4,
+            minValue = 0,
+            allowInfinite = true,
+            correspond = true,
+            descriptors = {
+                "0",
+                "1",
+                "2",
+                "3"
+            }
+        }
+    }
+}
+
+UniqueCharData[33] = {
+    name = "Yasmine",
+    timers = {
+        {
+            id = "timer_0_033",
+            name = "Nakatagong Lakas",
+            install = true,
+            timerMaxValue = 1500
+        }
+    },
+    stocks = {
+        {
+            id = "stock_0_033",
+            name = "Bayani Mode",
+            maxValue = 1,
+            minValue = 0,
+            allowInfinite = true,
+            correspond = false,
+            descriptors = {
+                "Standard",
+                "Activated"
+            }
+        }
+    }
+}
+
 -- iterate through the char data and add timer descriptors
 for _, charData in pairs(UniqueCharData) do
     if charData.timers then

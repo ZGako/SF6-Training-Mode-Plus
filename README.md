@@ -30,6 +30,7 @@ In particular, the following parameters are modifiable:
   - For timed installs, you can set the install timer to start at any specific place rather than at the maximum
   - For resources, the functionality is the same that is provided by the game
 - Positioning
+  - P1 vs P2 player side
   - Relative player distance, you can set a fixed player distance that is applied regardless of the screen position where you reset (center/left/right).
   - Absolute pivot point distance, you can move the pivot point from which the "relative player distance" gets calculated, this means being able to start from anywhere on screen.
     - To further elaborate, there is a lot of customizability on from where the calculation starts, you can set the pivot point to be in either absolute screen coordinates, or units from either corner.
@@ -125,3 +126,4 @@ This is a list of features that I may or may not be feasible (I'll identify them
   - Importing menu allows to also only importing single recordings of sets (they'll be separate files anyways)
 - [Most likely feasible] Export and Import Save States (as they are ingame)
 - [Feasible] Export "save state" from recording (might even be better to make it a fake savestate so you can use it as a basis for a randomizer drill)
+- [Feasible] Implement the mod's UI inside the game's UI (requires more looking into but possible)

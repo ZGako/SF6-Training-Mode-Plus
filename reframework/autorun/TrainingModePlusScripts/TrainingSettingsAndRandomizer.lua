@@ -1167,10 +1167,14 @@ function PositionalParam:init(SelectMenuData)
     -- determine current character ids from the passed SelectMenuData
     local char_id1 = SelectMenuData.PlayerDatas[0].FighterID
     local char_id2 = SelectMenuData.PlayerDatas[1].FighterID
-    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
-    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
-    local total_offset = offset1 + offset2
 
+    local offset_data_1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1]
+    local offset_data_2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2]
+
+    local minimum_offset1 = offset_data_1 and offset_data_1.minimum_distance_offset or 0.0
+    local minimum_offset2 = offset_data_2 and offset_data_2.minimum_distance_offset or 0.0
+    local position_relative_offset_1 = offset_data_1 and offset_data_1.position_vs_relative_distance_offset or 0.0
+    local position_relative_offset_2 = offset_data_2 and offset_data_2.position_vs_relative_distance_offset or 0.0
     --[[
         controller variables
     ]]
@@ -1181,10 +1185,11 @@ function PositionalParam:init(SelectMenuData)
 
     -- relative distance
     self.controller.relative_distance.min =
-        module.data.PositionParametersData.default_relative_distance.min + total_offset
+        module.data.PositionParametersData.default_relative_distance.min + minimum_offset1 + minimum_offset2
     -- account for character-specific offsets: subtract total_offset from the allowed max
     self.controller.relative_distance.max =
-        module.data.PositionParametersData.default_relative_distance.max - total_offset
+        module.data.PositionParametersData.default_relative_distance.max -
+        (position_relative_offset_1 + position_relative_offset_2)
 
     if SelectMenuData.StartLocation == 0 then
         -- midscreen start
@@ -1266,6 +1271,9 @@ function PositionalParam:init(SelectMenuData)
     self.view.randomizer.screen_discrete_bounds_changed = false
     self.view.randomizer.screen_continuous_bounds_changed = false
 
+    -- P1 vs P2 side
+    self.controller.randomizer.sideswitch_enabled = false
+
     --[[
         HOOKS
     ]]
@@ -1282,9 +1290,11 @@ function PositionalParam:init(SelectMenuData)
         local char_id1 = self.model.PlayerDatas[0].FighterID
         local char_id2 = self.model.PlayerDatas[1].FighterID
 
-        local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
-        local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
-        local total_offset = offset1 + offset2
+        local offset_data_1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1]
+        local offset_data_2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2]
+        local position_relative_offset_1 = offset_data_1 and offset_data_1.position_vs_relative_distance_offset or 0.0
+        local position_relative_offset_2 = offset_data_2 and offset_data_2.position_vs_relative_distance_offset or 0.0
+        local total_offset = position_relative_offset_1 + position_relative_offset_2
 
         -- if starting position adjustment is enabled, force custom start location
         if self.controller.screen_position.enabled then
@@ -1301,9 +1311,9 @@ function PositionalParam:init(SelectMenuData)
 
         if self.model.StartLocation == 0 then
             -- center pivot
-            local center_position = (self.controller.relative_distance.relative_distance) / 2.0
-            self.model.PlayerDatas[0].ManualPosX = -center_position - (total_offset / 2.0)
-            self.model.PlayerDatas[1].ManualPosX = center_position + (total_offset / 2.0)
+            local rel_distance = self.controller.relative_distance.relative_distance
+            self.model.PlayerDatas[0].ManualPosX = -math.floor(rel_distance / 2.0) - (total_offset / 2.0)
+            self.model.PlayerDatas[1].ManualPosX = math.ceil(rel_distance / 2.0) + (total_offset / 2.0)
         elseif self.model.StartLocation == 1 then
             -- right side pivot
             local right_position = module.data.PositionParametersData.default_screen_position.max
@@ -1387,16 +1397,21 @@ function PositionalParam:update()
     local char_id1 = self.model.PlayerDatas[0].FighterID
     local char_id2 = self.model.PlayerDatas[1].FighterID
 
-    local offset1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1] or 0.0
-    local offset2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2] or 0.0
-    local total_offset = offset1 + offset2
+    local offset_data_1 = module.data.PositionParametersData.character_relative_distance_offsets[char_id1]
+    local offset_data_2 = module.data.PositionParametersData.character_relative_distance_offsets[char_id2]
+
+    local minimum_offset1 = offset_data_1 and offset_data_1.minimum_distance_offset or 0.0
+    local minimum_offset2 = offset_data_2 and offset_data_2.minimum_distance_offset or 0.0
+    local position_relative_offset_1 = offset_data_1 and offset_data_1.position_vs_relative_distance_offset or 0.0
+    local position_relative_offset_2 = offset_data_2 and offset_data_2.position_vs_relative_distance_offset or 0.0
 
     -- relative distance updates
     self.controller.relative_distance.min =
-        module.data.PositionParametersData.default_relative_distance.min + total_offset
+        module.data.PositionParametersData.default_relative_distance.min + minimum_offset1 + minimum_offset2
     -- keep max within screen-space minus the total character offset
     self.controller.relative_distance.max =
-        module.data.PositionParametersData.default_relative_distance.max - total_offset
+        module.data.PositionParametersData.default_relative_distance.max -
+        (position_relative_offset_1 + position_relative_offset_2)
 
     self.controller.relative_distance.relative_distance =
         math.max(
@@ -1868,11 +1883,19 @@ function PositionalParam:randomize()
         end
     end
 
+    -- if the randomizer is enabled, then randomly choose a side
+    if self.controller.randomizer.sideswitch_enabled then
+        self.model.Is_Side_Flip = (math.random(0, 1) == 1)
+    end
+
     return need_refresh
 end
 
 function PositionalParam:draw_ui()
     -- positional parameter UI logic
+
+    _, self.controller.randomizer.sideswitch_enabled =
+        imgui.checkbox("Enable Random Side Switching", self.controller.randomizer.sideswitch_enabled)
 
     self.view.relative_distance.relative_distance_enabled_changed, self.controller.relative_distance.enabled =
         imgui.checkbox("Enable Start Position Adjustment", self.controller.relative_distance.enabled)
@@ -2244,9 +2267,24 @@ function module.init()
     local config_file = json.load_file("TrainingModePlus/TrainingSettingsAndRandomizer_Config.json")
     if config_file ~= nil then
         PlayerParam.controller = config_file.PlayerParam or PlayerParam.controller
-        UniqueGaugeParam.controller = config_file.UniqueGaugeParam or UniqueGaugeParam.controller
         PositionalParam.controller = config_file.PositionalParam or PositionalParam.controller
         module.hotkeys = config_file.Hotkeys or module.hotkeys
+
+        -- Safely merge UniqueGaugeParam data instead of overwriting it (useful for updating mod versions where new characters may be added)
+        if config_file.UniqueGaugeParam then
+            for char_name, char_data in pairs(config_file.UniqueGaugeParam) do
+                -- Only copy if the character exists in the current initialized data
+                if UniqueGaugeParam.controller[char_name] then
+                    for gauge_id, gauge_data in pairs(char_data) do
+                        if UniqueGaugeParam.controller[char_name][gauge_id] then
+                            for key, val in pairs(gauge_data) do
+                                UniqueGaugeParam.controller[char_name][gauge_id][key] = val
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 
     -- initialize refresh request flag
