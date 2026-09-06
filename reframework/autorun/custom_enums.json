@@ -1,0 +1,40 @@
+{
+    "app.training.TrainingFuncType": [
+		{
+            "name": "GAME_SPEED_60",
+            "value": 347
+        },
+        {
+            "name": "GAME_SPEED_70",
+            "value": 348
+        },
+        {
+            "name": "GAME_SPEED_80",
+            "value": 349
+        },
+        {
+            "name": "GAME_SPEED_90",
+            "value": 350
+        },
+        {
+            "name": "GAME_SPEED_110",
+            "value": 351
+        },
+        {
+            "name": "GAME_SPEED_120",
+            "value": 352
+        },
+        {
+            "name": "GAME_SPEED_130",
+            "value": 353
+        },
+        {
+            "name": "GAME_SPEED_140",
+            "value": 354
+        },
+        {
+            "name": "GAME_SPEED_150",
+            "value": 355
+        }
+	]
+}

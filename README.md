@@ -7,6 +7,8 @@ Collection of training mode scripts that aim to improve your ability to use lab 
 Both [REframework](https://github.com/praydog/REFramework) and [\_ScriptCore](https://www.nexusmods.com/streetfighter6/mods/3160) are required to run this mod.
 Suggested installation is to install this mod through the [fluffy mod manager](https://www.nexusmods.com/site/mods/818).
 
+Also I recommend downloading this mod from the [NexusMods listing](https://www.nexusmods.com/streetfighter6/mods/3167).
+
 # Features
 
 The mod features separate and independent "modules", and all of them aim to help with labbing.
@@ -64,7 +66,9 @@ This module is intended to supplement the previous one by allowing you to check 
 This module allows for more game speed options beyond the game's default 100% and 50%.
 The range of supported speeds goes from 150% to 50% in 10% increments.
 
-A refresh may sometimes be required due to training mode quirks.
+A refresh may sometimes be required due to training mode quirks. (REframework UI Version)
+
+Ingame UI version has been implemented too.
 
 # Suggested usages
 

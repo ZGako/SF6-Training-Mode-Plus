@@ -34,7 +34,7 @@ do
     local to_load = {
         "TrainingModePlusScripts/TrainingSettingsAndRandomizer",
         "TrainingModePlusScripts/CharacterInfoDisplay",
-        "TrainingModePlusScripts/GameSpeedPlus"
+        "TrainingModePlusScripts/UI_VER_GameSpeedPlus"
     }
 
     for _, entry in ipairs(to_load) do
