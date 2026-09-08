@@ -1,0 +1,18 @@
+# Core .NET build output folders
+[Bb]in/
+[Oo]bj/
+
+# VS Code / Visual Studio hidden folders
+.vscode/
+.vs/
+*.user
+
+# Ignore all DLLs and compiled binaries globally 
+# (This stops you from accidentally committing the mod you build)
+*.dll
+*.exe
+*.pdb
+
+# ... EXCEPT for the ones in your libs folder! 
+# This ensures your IntelliSense proxy DLLs are pushed to GitHub.
+!libs/**/*.dll
