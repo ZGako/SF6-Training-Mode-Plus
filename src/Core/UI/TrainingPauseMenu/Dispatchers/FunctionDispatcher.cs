@@ -19,7 +19,7 @@ public static class TrainingFunctionDispatcher
     private static PreHookResult OnFunctionPre(Span<ulong> args)
     {
         // FuncType argument
-        int funcType = (int)args[3];
+        int funcType = (int)args[2];
 
         if (funcType <= (int)app.training.TrainingFuncType.MAX) return PreHookResult.Continue;
 
@@ -56,11 +56,13 @@ public static class TrainingFunctionDispatcher
     public static int RegisterCustomFunction(string name, Action action)
     {
         // Generate a unique FuncType integer for this custom function
+
         int funcType = CustomActions.Count;
 
-        // Store the action in the dictionary
-        CustomActions[funcType] = action;
-
+        if (!CustomActions.TryAdd(funcType, action))
+        {
+            API.LogWarning($"Custom function '{name}' is already registered.");
+        }
         return funcType + (int)app.training.TrainingFuncType.MAX + 1; // Return the adjusted FuncType for use in the menu
     }
 }
