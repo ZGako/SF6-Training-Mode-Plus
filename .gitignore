@@ -8,12 +8,11 @@
 *.user
 
 # Ignore all DLLs and compiled binaries globally 
-# (This stops you from accidentally committing the mod you build)
 *.dll
 *.exe
 *.pdb
 
-# ... EXCEPT for the ones in your libs folder! 
+# ... except for the ones in your libs folder! 
 # This ensures your IntelliSense proxy DLLs are pushed to GitHub.
 !libs/**/*.dll
 

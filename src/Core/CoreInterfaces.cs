@@ -9,8 +9,3 @@ public interface ITrainingModePlusModule
     void Unload();
 }
 
-
-public interface IDynamicUIModifier
-{
-    void Restore();
-}

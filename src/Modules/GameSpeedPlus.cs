@@ -6,14 +6,17 @@ using REFrameworkNET;
 using REFrameworkNET.Attributes;
 
 using SF6_Training_Mode_Plus.Core;
-using SF6_Training_Mode_Plus.Core.TrainingPauseMenu;
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu;
+using SF6_Training_Mode_Plus.Core.UI;
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Modifiers;
 
 namespace SF6_Training_Mode_Plus.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
 
-    private readonly Stack<IDynamicUIModifier> _appliedModifiers = new();
+    private readonly Stack<IUIDynamicModifier> _appliedModifiers = new();
 
     public void Init()
     {
@@ -28,7 +31,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         }
 
         // Add new UI element to the training pause menu
-        var newElement = MenuDataElementFactory.CreateTextElement("GameSpeedPlus: Adjust game speed in training mode.");
+        var newElement = TextElementFactory.Create("GameSpeedPlus: Adjust game speed in training mode.");
 
         // Create a new TrainingDataArrayModifier to add the new element to the menu
         var menuModifier = new TrainingDataArrayModifier(TrainingModePlus.TrainingManager._UIData._MenuData[1]._ChildData[3], [newElement]);

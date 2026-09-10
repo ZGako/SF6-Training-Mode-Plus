@@ -42,8 +42,6 @@ public class TrainingModePlus
             module.Unload();
         }
         Modules.Clear();
-
-        // Cleanup added UI and stuff like that
     }
 
 

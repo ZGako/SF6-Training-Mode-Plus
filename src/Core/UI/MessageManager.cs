@@ -6,7 +6,7 @@ using REFrameworkNET.Attributes;
 using REFrameworkNET.Collections;
 using System.Collections.Generic;
 
-namespace SF6_Training_Mode_Plus.Core;
+namespace SF6_Training_Mode_Plus.Core.UI;
 
 public class CustomMessage
 {

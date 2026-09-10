@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using REFrameworkNET;
 using REFrameworkNET.Attributes;
 
-namespace SF6_Training_Mode_Plus.Core.TrainingPauseMenu;
+namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Modifiers;
 
-public class TrainingDataArrayModifier : IDynamicUIModifier
+public class TrainingDataArrayModifier : IUIDynamicModifier
 {
 
     private readonly app.training.TrainingMenuData _parentMenu;

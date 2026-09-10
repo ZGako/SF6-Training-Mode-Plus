@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using REFrameworkNET;
 using REFrameworkNET.Attributes;
 
-namespace SF6_Training_Mode_Plus.Core.TrainingPauseMenu;
+namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
 
 public static class TrainingFunctionDispatcher
 {

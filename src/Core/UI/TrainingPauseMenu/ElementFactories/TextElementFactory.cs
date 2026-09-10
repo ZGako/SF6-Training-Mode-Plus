@@ -1,14 +1,14 @@
-using System;
-using System.Collections.Generic;
+
 
 using REFrameworkNET;
-using REFrameworkNET.Attributes;
 
-namespace SF6_Training_Mode_Plus.Core.TrainingPauseMenu;
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
 
-public static class MenuDataElementFactory
+namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
+
+public static class TextElementFactory
 {
-    public static app.training.TrainingMenuData CreateTextElement(string message)
+    public static app.training.TrainingMenuData Create(string message)
     {
         // create instance as ManagedObject
         var newElementMo = app.training.TrainingMenuData.REFType.CreateInstance(0);
