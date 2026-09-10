@@ -5,6 +5,7 @@
     <RootNamespace>SF6_Training_Mode_Plus</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+  <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,5 +28,4 @@
       <HintPath>..\libs\managed\generated\REFramework.NET.viacore.dll</HintPath>
     </Reference>
   </ItemGroup>
-
 </Project>

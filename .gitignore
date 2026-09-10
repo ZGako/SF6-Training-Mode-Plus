@@ -16,3 +16,5 @@
 # ... EXCEPT for the ones in your libs folder! 
 # This ensures your IntelliSense proxy DLLs are pushed to GitHub.
 !libs/**/*.dll
+
+.editorconfig

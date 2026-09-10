@@ -8,22 +8,17 @@ using SF6_Training_Mode_Plus.Modules;
 
 namespace SF6_Training_Mode_Plus.Core;
 
-public interface ITrainingModePlusModule
-{
-    void Init();
-}
-
 public class TrainingModePlus
 {
 
-    private static readonly List<ITrainingModePlusModule> _modules = [];
+    private static readonly List<ITrainingModePlusModule> Modules = [];
 
     public static bool IsTrainingManagerInitialized { get; private set; } = false;
 
     public static app.training.TrainingManager? TrainingManager { get; private set; }
 
     [PluginEntryPoint]
-    public static void Main()
+    private static void Main()
     {
         // Logging stuff
         API.LogLevel = 0;
@@ -31,18 +26,22 @@ public class TrainingModePlus
         // API.LogLevel = (LogLevel)1;
 
         // Register modules
-        _modules.Add(new GameSpeedPlus());
+        Modules.Add(new GameSpeedPlus());
     }
 
     [PluginExitPoint]
-    public static void OnUnload()
+    private static void OnUnload()
     {
         API.LogInfo("Unloading TrainingModePlus C# plugin...");
 
         // Clean up static states
         IsTrainingManagerInitialized = false;
         TrainingManager = null;
-        _modules.Clear();
+        foreach (var module in Modules)
+        {
+            module.Unload();
+        }
+        Modules.Clear();
 
         // Cleanup added UI and stuff like that
     }
@@ -51,7 +50,7 @@ public class TrainingModePlus
 
     // Code to run every frame before the game updates
     [Callback(typeof(UpdateBehavior), CallbackType.Pre)]
-    public static void OnUpdate()
+    private static void OnUpdate()
     {
 
         if (IsTrainingManagerInitialized) return;
@@ -67,7 +66,7 @@ public class TrainingModePlus
         IsTrainingManagerInitialized = true;
 
         // Initialize all modules
-        foreach (var module in _modules)
+        foreach (var module in Modules)
         {
             module.Init();
         }

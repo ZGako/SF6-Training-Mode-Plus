@@ -1,14 +1,20 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Collections.Generic;
+
 using REFrameworkNET;
-using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;
-using REFrameworkNET.Collections;
 
 using SF6_Training_Mode_Plus.Core;
+using SF6_Training_Mode_Plus.Core.TrainingPauseMenu;
 
 namespace SF6_Training_Mode_Plus.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
+
+    private readonly Stack<IDynamicUIModifier> _appliedModifiers = new();
+
     public void Init()
     {
         // Initialize the GameSpeedPlus module
@@ -21,49 +27,21 @@ public class GameSpeedPlus : ITrainingModePlusModule
             return;
         }
 
+        // Add new UI element to the training pause menu
+        var newElement = MenuDataElementFactory.CreateTextElement("GameSpeedPlus: Adjust game speed in training mode.");
 
-        // Add new UI element here
-        var testing = TrainingModePlus.TrainingManager._UIData._MenuData[1]._ChildData[3];
+        // Create a new TrainingDataArrayModifier to add the new element to the menu
+        var menuModifier = new TrainingDataArrayModifier(TrainingModePlus.TrainingManager._UIData._MenuData[1]._ChildData[3], [newElement]);
 
-        // var testingMo = ManagedObject.IsManagedObject(testing.Address());
-
-        var oldArrayMo = (testing as IObject).GetField("_ChildData") as ManagedObject;
-        var oldArray = oldArrayMo.As<_System.Array>();
-
-        var newArr = app.training.TrainingMenuData.REFType.CreateManagedArray(4);
-        newArr.Globalize();
-
-        var arr = newArr.As<_System.Array>();
-
-        for (int i = 0; i < oldArray.Count; i++)
-        {
-            // copy existing elements to new array
-            arr.SetValue(oldArray.GetValue(i), i);
-        }
-
-        // Add new element to the end of the array
-
-        var newElementMo = app.training.TrainingMenuData.REFType.CreateInstance(0);
-        newElementMo.Globalize();
-
-        var newElement = newElementMo.As<app.training.TrainingMenuData>();
-
-        newElement._FuncType = (app.training.TrainingFuncType)500;
-
-        arr.SetValue(newElement, oldArray.Count);
-
-        testing._ChildData = newArr.As<app.training.TrainingMenuData_Array1D>();
-
-
-        API.LogInfo("Finished");
-
+        _appliedModifiers.Push(menuModifier);
     }
 
-    [MethodHook(typeof(app.training.TrainingManager), nameof(app.training.TrainingManager.InitUIMenu), MethodHookType.Post)]
-    public static void MyPostHook(ref ulong retval)
+    public void Unload()
     {
-        // Add new UI element here
-        API.LogInfo("Adding GameSpeedPlus UI element...");
+        while (_appliedModifiers.Count > 0)
+        {
+            var uiModifier = _appliedModifiers.Pop();
+            uiModifier.Restore();
+        }
     }
-
 }
