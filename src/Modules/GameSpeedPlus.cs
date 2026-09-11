@@ -13,6 +13,8 @@ using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
 using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Modifiers;
 using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.SpinBoxDispatcher;
 using app.battle.ai.learning;
+using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.TrainingFunctionDispatcher;
+using app;
 
 namespace SF6_Training_Mode_Plus.Modules;
 
@@ -39,18 +41,18 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
     // change mapping here to change the order of the elements in the spinbox
     private static readonly GameSpeed[] GameSpeedToIndex = [
+        GameSpeed.PAUSE,
+        GameSpeed.SPEED_50,
+        GameSpeed.SPEED_60,
+        GameSpeed.SPEED_70,
+        GameSpeed.SPEED_80,
+        GameSpeed.SPEED_90,
         GameSpeed.SPEED_100,
         GameSpeed.SPEED_110,
         GameSpeed.SPEED_120,
         GameSpeed.SPEED_130,
         GameSpeed.SPEED_140,
         GameSpeed.SPEED_150,
-        GameSpeed.PAUSE,
-        GameSpeed.SPEED_50,
-        GameSpeed.SPEED_60,
-        GameSpeed.SPEED_70,
-        GameSpeed.SPEED_80,
-        GameSpeed.SPEED_90
     ];
 
     private static readonly GameSpeed[] OriginalGameSpeedOrder = [
@@ -91,6 +93,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
                                                 orderArray,
                                                 new(app.training.TrainingFuncType.ENVIRONMENT, spinnerIndex),
                                                 GetCurrentGameSpeedIndex);
+
+        RegisterCustomOptionSelectFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, ResetToDefaultGameSpeed);
+
         _appliedModifiers.Push(menuModifier);
 
         API.LogInfo("GameSpeedPlus module initialized successfully.");
@@ -206,20 +211,31 @@ public class GameSpeedPlus : ITrainingModePlusModule
         return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
     }
 
+    private static void ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
+    {
+        var uiFlowParam = ManagedProxy<app.training.UIFlowTrainingMenu.Param>.Create(baseParam);
+        var uipart = ManagedProxy<UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
+        uipart.Num = Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
+        var scrollList = ManagedProxy<UIPartsScrollList>.Create(uipart.GetChild(0));
+        scrollList.SetSelectedIndex(Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100), false);
+        uiFlowParam.UpdateSpinBox(rowIndex, true, true);
+        uiFlowParam.OnUpdateSpin();
+    }
+
     private static List<app.training.TrainingMenuData> CreateGameSpeedElements()
     {
         var elements = new List<app.training.TrainingMenuData>
         {
             // Create a new TrainingMenuData element for the game speed adjustment
-            TextElementFactory.Create("60%", "GAMESPEED_60", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_60)),
-            TextElementFactory.Create("70%", "GAMESPEED_70", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_70)),
-            TextElementFactory.Create("80%", "GAMESPEED_80", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_80)),
-            TextElementFactory.Create("90%", "GAMESPEED_90", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_90)),
-            TextElementFactory.Create("110%", "GAMESPEED_110", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_110)),
-            TextElementFactory.Create("120%", "GAMESPEED_120", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_120)),
-            TextElementFactory.Create("130%", "GAMESPEED_130", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_130)),
-            TextElementFactory.Create("140%", "GAMESPEED_140", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_140)),
-            TextElementFactory.Create("150%", "GAMESPEED_150", () => ChangeGameSpeed(app.training.GameSpeed.SPEED_150))
+            TextElementFactory.Create("60%", "GAMESPEED_60", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_60)),
+            TextElementFactory.Create("70%", "GAMESPEED_70", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_70)),
+            TextElementFactory.Create("80%", "GAMESPEED_80", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_80)),
+            TextElementFactory.Create("90%", "GAMESPEED_90", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_90)),
+            TextElementFactory.Create("110%", "GAMESPEED_110", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_110)),
+            TextElementFactory.Create("120%", "GAMESPEED_120", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_120)),
+            TextElementFactory.Create("130%", "GAMESPEED_130", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_130)),
+            TextElementFactory.Create("140%", "GAMESPEED_140", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_140)),
+            TextElementFactory.Create("150%", "GAMESPEED_150", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_150))
         };
 
         return elements;

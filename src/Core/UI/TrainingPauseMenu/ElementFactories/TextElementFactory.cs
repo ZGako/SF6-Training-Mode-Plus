@@ -4,10 +4,13 @@ using REFrameworkNET;
 
 using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
 
+using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.TrainingFunctionDispatcher;
+
 namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
 
 public static class TextElementFactory
 {
+    // Dummy test function, don't use
     public static app.training.TrainingMenuData Create(string message)
     {
         // create instance as ManagedObject
@@ -21,13 +24,14 @@ public static class TextElementFactory
         // convert to array type and set the other fields
         var newElement = newElementMo.As<app.training.TrainingMenuData>();
 
-        newElement.FuncType = (app.training.TrainingFuncType)TrainingFunctionDispatcher.RegisterCustomFunction("TestFunction", () => API.LogInfo("test function called"));
+        newElement.FuncType = (app.training.TrainingFuncType)RegisterNewFunctionType("TEST_FUNCTION");
+        TrainingFunctionDispatcher.RegisterCustomFunction("TEST_FUNCTION", (baseParam, viewData, rowIndex) => API.LogInfo("test function called"));
         newElement.IsEnabled = true;
 
         return newElement;
     }
 
-    public static app.training.TrainingMenuData Create(string message, string functionName, Action action)
+    public static app.training.TrainingMenuData Create(string message, string functionName, FunctionDelegate action)
     {
         // create instance as ManagedObject
         var newElementMo = app.training.TrainingMenuData.REFType.CreateInstance(0);
@@ -40,7 +44,9 @@ public static class TextElementFactory
         // convert to array type and set the other fields
         var newElement = newElementMo.As<app.training.TrainingMenuData>();
 
-        newElement.FuncType = (app.training.TrainingFuncType)TrainingFunctionDispatcher.RegisterCustomFunction(functionName, action);
+
+        newElement.FuncType = (app.training.TrainingFuncType)RegisterNewFunctionType(functionName);
+        RegisterCustomFunction(functionName, action);
         newElement.IsEnabled = true;
 
         return newElement;
