@@ -24,8 +24,8 @@ public static class TextElementFactory
         // convert to array type and set the other fields
         var newElement = newElementMo.As<app.training.TrainingMenuData>();
 
-        newElement.FuncType = (app.training.TrainingFuncType)RegisterNewFunctionType("TEST_FUNCTION");
-        TrainingFunctionDispatcher.RegisterCustomFunction("TEST_FUNCTION", (baseParam, viewData, rowIndex) => API.LogInfo("test function called"));
+        newElement.FuncType = (app.training.TrainingFuncType)FunctionTypeRegistry.RegisterNewFunctionType("TEST_FUNCTION");
+        RegisterCustomFunction("TEST_FUNCTION", (baseParam, viewData, rowIndex) => API.LogInfo("test function called"));
         newElement.IsEnabled = true;
 
         return newElement;
@@ -45,7 +45,7 @@ public static class TextElementFactory
         var newElement = newElementMo.As<app.training.TrainingMenuData>();
 
 
-        newElement.FuncType = (app.training.TrainingFuncType)RegisterNewFunctionType(functionName);
+        newElement.FuncType = (app.training.TrainingFuncType)FunctionTypeRegistry.RegisterNewFunctionType(functionName);
         RegisterCustomFunction(functionName, action);
         newElement.IsEnabled = true;
 

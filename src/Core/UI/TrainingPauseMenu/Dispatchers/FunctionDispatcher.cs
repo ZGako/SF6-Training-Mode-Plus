@@ -11,9 +11,6 @@ namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
 
 public static class TrainingFunctionDispatcher
 {
-    // Store all new allocated functionTypes here
-    private static readonly Dictionary<string, int> CustomFunctionTypes = [];
-
     // A dictionary mapping our custom FuncType integers to C# lambdas
     private static readonly Dictionary<int, FunctionDelegate> CustomFunctions = [];
 
@@ -22,24 +19,13 @@ public static class TrainingFunctionDispatcher
     // delegate type for all functions are the same signature
     public delegate void FunctionDelegate(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex);
 
-
-    public static int RegisterNewFunctionType(string name)
-    {
-        if (!CustomFunctionTypes.TryAdd(name, CustomFunctionTypes.Count + (int)app.training.TrainingFuncType.MAX + 1))
-        {
-            API.LogWarning($"Custom function '{name}' is already registered.");
-        }
-
-        return CustomFunctionTypes[name];
-    }
-
     // Function specific methods
 
     public static void RegisterCustomFunction(string name, FunctionDelegate action)
     {
         // Generate a unique FuncType integer for this custom function
 
-        if (CustomFunctionTypes.TryGetValue(name, out int funcType))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int funcType))
         {
             if (!CustomFunctions.TryAdd(funcType, action))
             {
@@ -67,8 +53,8 @@ public static class TrainingFunctionDispatcher
         if (CustomFunctions.TryGetValue(funcType, out FunctionDelegate? action))
         {
 
-            var baseParam = UIHelpers.GetArgAs<app.training.UIFlowTrainingMenu.Param>(args[3]);
-            var viewData = UIHelpers.GetArgAs<app.training.UIFlowTrainingMenu.Param.ViewData>(args[4]);
+            var baseParam = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[3]);
+            var viewData = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param.ViewData>(args[4]);
 
             if (baseParam == null || viewData == null)
             {
@@ -113,7 +99,7 @@ public static class TrainingFunctionDispatcher
     {
         // Generate a unique FuncType integer for this custom function
 
-        if (CustomFunctionTypes.TryGetValue(name, out int funcType))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int funcType))
         {
             if (!CustomOptionSelectFunctions.TryAdd(funcType, action))
             {
@@ -149,8 +135,8 @@ public static class TrainingFunctionDispatcher
             {
                 int rowIndex = (int)args[5];
 
-                var baseParam = UIHelpers.GetArgAs<app.training.UIFlowTrainingMenu.Param>(args[3]);
-                var viewData = UIHelpers.GetArgAs<app.training.UIFlowTrainingMenu.Param.ViewData>(args[4]);
+                var baseParam = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[3]);
+                var viewData = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param.ViewData>(args[4]);
 
                 // Invoke function
                 action.Invoke(baseParam, viewData, rowIndex);
@@ -183,6 +169,12 @@ public static class TrainingFunctionDispatcher
             // Reset for the next call
             s_handledCustomOptionSelectFunction = false;
         }
+    }
+
+    public static void Clear()
+    {
+        CustomFunctions.Clear();
+        CustomOptionSelectFunctions.Clear();
     }
 
 

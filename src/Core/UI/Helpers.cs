@@ -2,12 +2,14 @@ using System;
 
 using REFrameworkNET;
 
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
+
 namespace SF6_Training_Mode_Plus.Core.UI;
 
 public static class UIHelpers
 {
 
-    public static T GetArgAs<T>(ulong address) where T : class
+    public static T GetAddressAs<T>(ulong address) where T : class
     {
         var managedObj = ManagedObject.ToManagedObject(address)
             ?? throw new ArgumentException($"Failed to convert pointer address {address} to a ManagedObject.");
@@ -28,7 +30,7 @@ public static class UIHelpers
         }
         else
         {
-            API.LogWarning($"Type definitions missing for strict validation on {address}. Proceeding with blind cast.");
+            // API.LogWarning($"Type definitions missing for strict validation on {address}. Proceeding with blind cast.");
         }
 
         return managedObj.As<T>() ?? throw new InvalidCastException($"Proxy creation failed for object at address {address}.");
@@ -46,5 +48,15 @@ public static class UIHelpers
             RequestedType = (typeof(T).GetField("REFType", flags)?.GetValue(null)
                           ?? typeof(T).GetProperty("REFType", flags)?.GetValue(null)) as TypeDefinition;
         }
+    }
+
+    public static void ClearTrainingPauseMenuDispatchers()
+    {
+        // Clear all registered custom function types and their associated delegates
+        MessageManager.Clear();
+        FunctionTypeRegistry.Clear();
+        TrainingFunctionDispatcher.Clear();
+        SpinBoxDispatcher.Clear();
+        InputGuideDispatcher.Clear();
     }
 }

@@ -74,4 +74,9 @@ public static class SpinBoxDispatcher
         return PreHookResult.Continue;
     }
 
+    public static void Clear()
+    {
+        CustomInitializations.Clear();
+    }
+
 }

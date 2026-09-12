@@ -15,8 +15,9 @@ using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.SpinBo
 using app.battle.ai.learning;
 using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.TrainingFunctionDispatcher;
 using app;
+using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
 
-namespace SF6_Training_Mode_Plus.Modules;
+namespace SF6_Training_Mode_Plus.TrainingModePlus.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
@@ -95,6 +96,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
                                                 GetCurrentGameSpeedIndex);
 
         RegisterCustomOptionSelectFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, ResetToDefaultGameSpeed);
+
+        InputGuideDispatcher.RegisterCustomInputGuideFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, SetCustomGuide);
 
         _appliedModifiers.Push(menuModifier);
 
@@ -240,4 +243,19 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         return elements;
     }
+
+    private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
+    {
+        var customGuideDataMo = InputGuideData.REFType.CreateInstance(0);
+        customGuideDataMo.Globalize();
+
+        var customGuideData = customGuideDataMo.As<app.InputGuideData>();
+        customGuideData.Type = InputGuideDataType.DigitalConfig;
+        customGuideData.DigitalConfigId = app.InputAssign.Digital.ConfigId.UI_BACK;
+        var newMessage = new CustomMessage("Restore to Standard");
+        Core.UI.MessageManager.SetGuid(customGuideDataMo, "<MessageId>k__BackingField", newMessage.Id);
+
+        outInputGuideDataList.Add(customGuideData);
+    }
+
 }

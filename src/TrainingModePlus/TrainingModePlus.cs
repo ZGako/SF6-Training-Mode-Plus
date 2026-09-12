@@ -1,12 +1,15 @@
-﻿using REFrameworkNET;
+﻿using System;
+using REFrameworkNET;
 using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;
 using REFrameworkNET.Collections;
 using System.Collections.Generic;
 
-using SF6_Training_Mode_Plus.Modules;
+using SF6_Training_Mode_Plus.TrainingModePlus.Modules;
+using SF6_Training_Mode_Plus.Core;
+using SF6_Training_Mode_Plus.Core.UI;
 
-namespace SF6_Training_Mode_Plus.Core;
+namespace SF6_Training_Mode_Plus.TrainingModePlus;
 
 public class TrainingModePlus
 {
@@ -35,16 +38,9 @@ public class TrainingModePlus
         API.LogInfo("Unloading TrainingModePlus C# plugin...");
 
         // Clean up static states
-        IsTrainingManagerInitialized = false;
-        TrainingManager = null;
-        foreach (var module in Modules)
-        {
-            module.Unload();
-        }
+        CleanUpTrainingState();
         Modules.Clear();
     }
-
-
 
     // Code to run every frame before the game updates
     [Callback(typeof(UpdateBehavior), CallbackType.Pre)]
@@ -68,7 +64,31 @@ public class TrainingModePlus
         {
             module.Init();
         }
+    }
 
+    [MethodHook(typeof(app.training.TrainingManager), "Release", MethodHookType.Pre)]
+    private static PreHookResult OnTrainingManagerReleasePre(Span<ulong> args)
+    {
+        if (IsTrainingManagerInitialized)
+        {
+            API.LogInfo("TrainingManager released. Cleaning up mod state...");
+            CleanUpTrainingState();
+        }
+        return PreHookResult.Continue;
+    }
+
+    // Helper method to avoid repeating cleanup code in OnUnload and OnTrainingManagerReleasePre
+    private static void CleanUpTrainingState()
+    {
+        foreach (var module in Modules)
+        {
+            module.Unload();
+        }
+
+        IsTrainingManagerInitialized = false;
+        TrainingManager = null;
+
+        UIHelpers.ClearTrainingPauseMenuDispatchers();
     }
 
 }

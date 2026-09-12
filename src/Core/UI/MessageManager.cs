@@ -125,4 +125,9 @@ public static class MessageManager
             s_pendingMessageOverride = null;
         }
     }
+
+    public static void Clear()
+    {
+        CustomMessages.Clear();
+    }
 }
