@@ -1,17 +1,11 @@
 
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
-using REFrameworkNET;
-using REFrameworkNET.Attributes;
-
-namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
+namespace SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 public static class InputGuideDispatcher
 {
 
-    private static readonly Dictionary<int, InputGuideDelegate> CustomInputGuideDelegates = [];
+    private static readonly Dictionary<string, InputGuideDelegate> CustomInputGuideDelegates = [];
 
     // delegate type for pause menu input guide data modification
     public delegate void InputGuideDelegate(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList);
@@ -31,9 +25,9 @@ public static class InputGuideDispatcher
     {
         // Generate a unique FuncType integer for this custom function
 
-        if (FunctionTypeRegistry.TryGetFunctionType(name, out int funcType))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int _))
         {
-            if (!CustomInputGuideDelegates.TryAdd(funcType, action))
+            if (!CustomInputGuideDelegates.TryAdd(name, action))
             {
                 API.LogWarning($"Custom input guide function '{name}' is already registered.");
             }
@@ -46,11 +40,16 @@ public static class InputGuideDispatcher
 
     public static void RegisterCustomInputGuideFunction(app.training.TrainingFuncType funcType, InputGuideDelegate action)
     {
-        int funcTypeInt = (int)funcType;
-
-        if (!CustomInputGuideDelegates.TryAdd(funcTypeInt, action))
+        if (FunctionTypeRegistry.TryGetFunctionName((int)funcType, out string? name))
         {
-            API.LogWarning($"Custom input guide function for FuncType '{funcType}' is already registered.");
+            if (!CustomInputGuideDelegates.TryAdd(name!, action))
+            {
+                API.LogWarning($"Custom input guide function for FuncType '{funcType}' is already registered.");
+            }
+        }
+        else
+        {
+            API.LogError($"Custom input guide function for FuncType '{funcType}' is not registered. Call RegisterNewFunctionType first.");
         }
     }
 
@@ -67,7 +66,12 @@ public static class InputGuideDispatcher
             return PreHookResult.Continue;
         }
 
-        if (CustomInputGuideDelegates.ContainsKey((int)currentMenuData.FuncType))
+        if (!FunctionTypeRegistry.TryGetFunctionName((int)currentMenuData.FuncType, out string? name))
+        {
+            return PreHookResult.Continue;
+        }
+
+        if (CustomInputGuideDelegates.ContainsKey(name!))
         {
             s_handledCustomFunction = (int)currentMenuData.FuncType;
             s_pendingOutInputGuideDataListPtr = args[3];
@@ -85,7 +89,12 @@ public static class InputGuideDispatcher
             return;
         }
 
-        if (CustomInputGuideDelegates.TryGetValue(s_handledCustomFunction, out InputGuideDelegate? action))
+        if (!FunctionTypeRegistry.TryGetFunctionName(s_handledCustomFunction, out string? name))
+        {
+            return;
+        }
+
+        if (CustomInputGuideDelegates.TryGetValue(name!, out InputGuideDelegate? action))
         {
             try
             {

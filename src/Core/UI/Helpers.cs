@@ -1,14 +1,22 @@
-using System;
+// Core usings
+using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
-using REFrameworkNET;
+namespace SF6_TMP.Core.UI;
 
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
-
-namespace SF6_Training_Mode_Plus.Core.UI;
-
+/// <summary>
+/// A static class containing helper methods for UI-related operations.
+/// </summary>
 public static class UIHelpers
 {
 
+    /// <summary>
+    /// Attempts to retrieve a managed object of type T from a given memory address.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="address"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
+    /// <exception cref="InvalidCastException"></exception>
     public static T GetAddressAs<T>(ulong address) where T : class
     {
         var managedObj = ManagedObject.ToManagedObject(address)
@@ -36,6 +44,10 @@ public static class UIHelpers
         return managedObj.As<T>() ?? throw new InvalidCastException($"Proxy creation failed for object at address {address}.");
     }
 
+    /// <summary>
+    /// A nested static class that caches the TypeDefinition of a given type T for fast access.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
     private static class TypeDefCache<T> where T : class
     {
         public static readonly TypeDefinition? RequestedType;
@@ -50,6 +62,10 @@ public static class UIHelpers
         }
     }
 
+
+    /// <summary>
+    /// Clears all registered custom function types and their associated delegates in the Training Pause Menu system.
+    /// </summary>
     public static void ClearTrainingPauseMenuDispatchers()
     {
         // Clear all registered custom function types and their associated delegates

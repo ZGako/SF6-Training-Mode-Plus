@@ -1,26 +1,21 @@
-using System;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Collections.Generic;
+// Core usings
+using SF6_TMP.Core;
+using SF6_TMP.Core.UI;
+using SF6_TMP.Core.UI.TrainingPauseMenu;
+using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
+using SF6_TMP.Core.UI.TrainingPauseMenu.ElementFactories;
+using SF6_TMP.Core.UI.TrainingPauseMenu.Modifiers;
 
-using REFrameworkNET;
-using REFrameworkNET.Attributes;
-
-using SF6_Training_Mode_Plus.Core;
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu;
-using SF6_Training_Mode_Plus.Core.UI;
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Modifiers;
-using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.SpinBoxDispatcher;
-using app.battle.ai.learning;
-using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.TrainingFunctionDispatcher;
-using app;
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
-
-namespace SF6_Training_Mode_Plus.TrainingModePlus.Modules;
+namespace SF6_TMP.TrainingModePlus.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
+    /// <summary>
+    /// Singleton instance of the GameSpeedPlus module. This instance is used to manage the game speed functionality within the TrainingModePlus plugin.
+    /// </summary>
+    public static GameSpeedPlus Instance { get; private set; } = new GameSpeedPlus();
+    private GameSpeedPlus() { }
+
     private readonly Stack<IUIDynamicModifier> _appliedModifiers = new();
 
     // convenience enum to be able to change permutations in a readable way
@@ -77,7 +72,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         API.LogInfo("Initializing GameSpeedPlus module...");
 
         // Null stuff guard (annoying to type ?)
-        if (TrainingModePlus.TrainingManager == null)
+        if (GameSingletonRegistry.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
             return;
@@ -89,13 +84,15 @@ public class GameSpeedPlus : ITrainingModePlusModule
         var orderArray = GameSpeedToIndex.Select((_, index) => Array.IndexOf(GameSpeedToIndex, OriginalGameSpeedOrder[index])).ToArray();
 
         // Create a new TrainingDataArrayModifier to add the new element to the menu
-        var menuModifier = new SpinBoxModifier(TrainingModePlus.TrainingManager._UIData._MenuData[1]._ChildData[spinnerIndex],
+        var menuModifier = new SpinBoxModifier(GameSingletonRegistry.TrainingManager._UIData._MenuData[1]._ChildData[spinnerIndex],
                                                 CreateGameSpeedElements(),
                                                 orderArray,
                                                 new(app.training.TrainingFuncType.ENVIRONMENT, spinnerIndex),
                                                 GetCurrentGameSpeedIndex);
 
-        RegisterCustomOptionSelectFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, ResetToDefaultGameSpeed);
+        FunctionTypeRegistry.RegisterGameFunctionType(app.training.TrainingFuncType.ENV_GAME_SPEED);
+
+        TrainingFunctionDispatcher.RegisterCustomOptionSelectFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, ResetToDefaultGameSpeed);
 
         InputGuideDispatcher.RegisterCustomInputGuideFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, SetCustomGuide);
 
@@ -115,14 +112,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
     private static void ChangeGameSpeed(app.training.GameSpeed speedIndex)
     {
-        if (TrainingModePlus.TrainingManager == null)
+        if (GameSingletonRegistry.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
             return;
         }
 
         // get nested members of the singleton for easier access
-        var tfFuncs = TrainingModePlus.TrainingManager._tfFuncs as IObject;
+        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
         var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
 
         if (entriesArray != null && entriesArray.Length > 10)
@@ -149,14 +146,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
     private static int GetCurrentGameSpeedIndex()
     {
-        if (TrainingModePlus.TrainingManager == null)
+        if (GameSingletonRegistry.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
             return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
         }
 
         // get nested members of the singleton for easier access
-        var tfFuncs = TrainingModePlus.TrainingManager._tfFuncs as IObject;
+        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
         var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
 
         if (entriesArray == null || entriesArray.Length <= 10)
@@ -180,9 +177,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
             return Array.IndexOf(GameSpeedToIndex, GameSpeed.PAUSE);
         }
 
-        if (TrainingModePlus.TrainingManager.TData.OtherSetting.Is_Speed_Setting)
+        if (GameSingletonRegistry.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
         {
-            var currentSpeed = TrainingModePlus.TrainingManager.TData.OtherSetting.OS_Game_Speed;
+            var currentSpeed = GameSingletonRegistry.TrainingManager.TData.OtherSetting.OS_Game_Speed;
             switch (currentSpeed)
             {
                 case app.training.GameSpeed.SPEED_50:
@@ -217,9 +214,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
     private static void ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
     {
         var uiFlowParam = ManagedProxy<app.training.UIFlowTrainingMenu.Param>.Create(baseParam);
-        var uipart = ManagedProxy<UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
+        var uipart = ManagedProxy<app.UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
         uipart.Num = Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-        var scrollList = ManagedProxy<UIPartsScrollList>.Create(uipart.GetChild(0));
+        var scrollList = ManagedProxy<app.UIPartsScrollList>.Create(uipart.GetChild(0));
         scrollList.SetSelectedIndex(Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100), false);
         uiFlowParam.UpdateSpinBox(rowIndex, true, true);
         uiFlowParam.OnUpdateSpin();
@@ -244,16 +241,16 @@ public class GameSpeedPlus : ITrainingModePlusModule
         return elements;
     }
 
-    private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
+    private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
     {
-        var customGuideDataMo = InputGuideData.REFType.CreateInstance(0);
+        var customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
         customGuideDataMo.Globalize();
 
         var customGuideData = customGuideDataMo.As<app.InputGuideData>();
-        customGuideData.Type = InputGuideDataType.DigitalConfig;
+        customGuideData.Type = app.InputGuideDataType.DigitalConfig;
         customGuideData.DigitalConfigId = app.InputAssign.Digital.ConfigId.UI_BACK;
         var newMessage = new CustomMessage("Restore to Standard");
-        Core.UI.MessageManager.SetGuid(customGuideDataMo, "<MessageId>k__BackingField", newMessage.Id);
+        MessageManager.SetGuid(customGuideDataMo, "<MessageId>k__BackingField", newMessage.Id);
 
         outInputGuideDataList.Add(customGuideData);
     }

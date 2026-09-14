@@ -1,10 +1,6 @@
-using System;
-using System.Runtime.InteropServices;
-using System.Collections.Generic;
-using REFrameworkNET;
 
 
-namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Modifiers;
+namespace SF6_TMP.Core.UI.TrainingPauseMenu.Modifiers;
 
 // public abstract class containing the base modifiers' functionality
 public abstract class ModifierWrapper : IUIDynamicModifier

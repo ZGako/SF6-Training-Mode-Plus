@@ -1,12 +1,6 @@
-using System;
-using System.Runtime.InteropServices;
-using REFrameworkNET;
-using REFrameworkNET.Callbacks;
-using REFrameworkNET.Attributes;
-using REFrameworkNET.Collections;
-using System.Collections.Generic;
 
-namespace SF6_Training_Mode_Plus.Core.UI;
+
+namespace SF6_TMP.Core.UI;
 
 public class CustomMessage
 {
@@ -50,6 +44,14 @@ public class CustomMessage
         }
 
         return _cachedEngineStrings[langIndex].GetAddress();
+    }
+
+    public void ClearCachedEngineStrings()
+    {
+        for (int i = 0; i < _cachedEngineStrings.Length; i++)
+        {
+            _cachedEngineStrings[i]?.Release();
+        }
     }
 }
 
@@ -128,6 +130,10 @@ public static class MessageManager
 
     public static void Clear()
     {
+        foreach (var msg in CustomMessages.Values)
+        {
+            msg.ClearCachedEngineStrings();
+        }
         CustomMessages.Clear();
     }
 }

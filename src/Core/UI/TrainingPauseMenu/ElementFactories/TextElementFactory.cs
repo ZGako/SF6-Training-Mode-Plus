@@ -1,12 +1,6 @@
-using System;
+using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
-using REFrameworkNET;
-
-using SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
-
-using static SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers.TrainingFunctionDispatcher;
-
-namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.ElementFactories;
+namespace SF6_TMP.Core.UI.TrainingPauseMenu.ElementFactories;
 
 public static class TextElementFactory
 {
@@ -25,13 +19,13 @@ public static class TextElementFactory
         var newElement = newElementMo.As<app.training.TrainingMenuData>();
 
         newElement.FuncType = (app.training.TrainingFuncType)FunctionTypeRegistry.RegisterNewFunctionType("TEST_FUNCTION");
-        RegisterCustomFunction("TEST_FUNCTION", (baseParam, viewData, rowIndex) => API.LogInfo("test function called"));
+        TrainingFunctionDispatcher.RegisterCustomFunction("TEST_FUNCTION", (baseParam, viewData, rowIndex) => API.LogInfo("test function called"));
         newElement.IsEnabled = true;
 
         return newElement;
     }
 
-    public static app.training.TrainingMenuData Create(string message, string functionName, FunctionDelegate action)
+    public static app.training.TrainingMenuData Create(string message, string functionName, TrainingFunctionDispatcher.FunctionDelegate action)
     {
         // create instance as ManagedObject
         var newElementMo = app.training.TrainingMenuData.REFType.CreateInstance(0);
@@ -46,7 +40,7 @@ public static class TextElementFactory
 
 
         newElement.FuncType = (app.training.TrainingFuncType)FunctionTypeRegistry.RegisterNewFunctionType(functionName);
-        RegisterCustomFunction(functionName, action);
+        TrainingFunctionDispatcher.RegisterCustomFunction(functionName, action);
         newElement.IsEnabled = true;
 
         return newElement;

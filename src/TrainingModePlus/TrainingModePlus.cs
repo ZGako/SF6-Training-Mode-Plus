@@ -1,92 +1,71 @@
-﻿using System;
-using REFrameworkNET;
-using REFrameworkNET.Callbacks;
-using REFrameworkNET.Attributes;
-using REFrameworkNET.Collections;
-using System.Collections.Generic;
+﻿// Core usings
+using SF6_TMP.Core;
+using SF6_TMP.Core.UI;
+using SF6_TMP.Core.UI.TrainingPauseMenu;
 
-using SF6_Training_Mode_Plus.TrainingModePlus.Modules;
-using SF6_Training_Mode_Plus.Core;
-using SF6_Training_Mode_Plus.Core.UI;
+// TrainingModePlus usings
+using SF6_TMP.TrainingModePlus.Modules;
 
-namespace SF6_Training_Mode_Plus.TrainingModePlus;
+namespace SF6_TMP.TrainingModePlus;
 
-public class TrainingModePlus
+/// <summary>
+/// The main entry point for the TrainingModePlus plugin. This class is responsible for initializing the plugin, managing its modules, and handling the lifecycle of the TrainingManager.
+/// </summary>
+public static class TrainingModePlus
 {
-
     private static readonly List<ITrainingModePlusModule> Modules = [];
 
-    public static bool IsTrainingManagerInitialized { get; private set; } = false;
-
-    public static app.training.TrainingManager? TrainingManager { get; private set; }
-
     [PluginEntryPoint]
-    private static void Main()
+    private static void PluginEntryPoint()
     {
         // Logging stuff
         API.LogLevel = 0;
-        API.LogInfo("Loading TrainingModePlus C# plugin...");
-        // API.LogLevel = (LogLevel)1;
+        API.LogWarning("Loading TrainingModePlus C# plugin...");
+
+        // Register the TrainingManager singleton with the GameSingletonRegistry
+        GameSingletonRegistry.RegisterTrainingManager(
+            onReady: () =>
+            {
+                API.LogInfo("TrainingManager initialized!");
+
+                foreach (var module in Modules)
+                {
+                    module.Init();
+                }
+            },
+            onRelease: () =>
+            {
+                CleanUpTrainingState();
+                API.LogInfo("TrainingManager released. Mod state cleaned up.");
+            }
+        );
 
         // Register modules
-        Modules.Add(new GameSpeedPlus());
+        // Modules.Add(GameSpeedPlus.Instance);
+        Modules.Add(TestingRefactor.Instance);
     }
 
     [PluginExitPoint]
-    private static void OnUnload()
+    private static void PluginExitPoint()
     {
-        API.LogInfo("Unloading TrainingModePlus C# plugin...");
-
         // Clean up static states
         CleanUpTrainingState();
+        GameSingletonRegistry.Clear();
         Modules.Clear();
+
+        API.LogInfo("Unloading TrainingModePlus C# plugin...");
     }
 
-    // Code to run every frame before the game updates
-    [Callback(typeof(UpdateBehavior), CallbackType.Pre)]
-    private static void OnUpdate()
-    {
-
-        if (IsTrainingManagerInitialized) return;
-
-        TrainingManager = API.GetManagedSingletonT<app.training.TrainingManager>();
-
-        if (TrainingManager == null) return;
-
-        if (!TrainingManager.IsInit) return;
-
-        API.LogInfo("TrainingManager initialized!");
-
-        IsTrainingManagerInitialized = true;
-
-        // Initialize all modules
-        foreach (var module in Modules)
-        {
-            module.Init();
-        }
-    }
-
-    [MethodHook(typeof(app.training.TrainingManager), "Release", MethodHookType.Pre)]
-    private static PreHookResult OnTrainingManagerReleasePre(Span<ulong> args)
-    {
-        if (IsTrainingManagerInitialized)
-        {
-            API.LogInfo("TrainingManager released. Cleaning up mod state...");
-            CleanUpTrainingState();
-        }
-        return PreHookResult.Continue;
-    }
-
-    // Helper method to avoid repeating cleanup code in OnUnload and OnTrainingManagerReleasePre
+    /// <summary>
+    /// Cleans up the training state by unloading all registered modules, resetting the TrainingManager and its initialization state, and clearing any UI dispatchers related to the training pause menu. 
+    /// This method is called when the plugin is unloaded or when the TrainingManager is released.
+    /// </summary>
     private static void CleanUpTrainingState()
     {
         foreach (var module in Modules)
         {
             module.Unload();
         }
-
-        IsTrainingManagerInitialized = false;
-        TrainingManager = null;
 
         UIHelpers.ClearTrainingPauseMenuDispatchers();
     }

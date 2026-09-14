@@ -1,33 +1,28 @@
-using System;
-using System.Collections.Generic;
 
-using app;
 
-using REFrameworkNET;
-using REFrameworkNET.Attributes;
-
-using SF6_Training_Mode_Plus.Core.UI;
-namespace SF6_Training_Mode_Plus.Core.UI.TrainingPauseMenu.Dispatchers;
+namespace SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 public static class TrainingFunctionDispatcher
 {
     // A dictionary mapping our custom FuncType integers to C# lambdas
-    private static readonly Dictionary<int, FunctionDelegate> CustomFunctions = [];
 
-    private static readonly Dictionary<int, FunctionDelegate> CustomOptionSelectFunctions = [];
+    // TODO change all dispatcher dictionaries to <string, FunctionDelegate> and use the function name as the key instead of the FuncType integer.
+    private static readonly Dictionary<string, FunctionDelegate> CustomFunctions = [];
+
+    private static readonly Dictionary<string, FunctionDelegate> CustomOptionSelectFunctions = [];
 
     // delegate type for all functions are the same signature
+    // TODO consider have the function return a bool to indicate if the game should continue processing the function or not. This would allow for more flexibility in custom functions.
     public delegate void FunctionDelegate(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex);
 
     // Function specific methods
 
     public static void RegisterCustomFunction(string name, FunctionDelegate action)
     {
-        // Generate a unique FuncType integer for this custom function
 
-        if (FunctionTypeRegistry.TryGetFunctionType(name, out int funcType))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int _))
         {
-            if (!CustomFunctions.TryAdd(funcType, action))
+            if (!CustomFunctions.TryAdd(name, action))
             {
                 API.LogWarning($"Custom function '{name}' is already registered.");
             }
@@ -35,6 +30,15 @@ public static class TrainingFunctionDispatcher
         else
         {
             API.LogError($"Custom function '{name}' is not registered. Call RegisterNewFunctionType first.");
+        }
+    }
+
+    public static void UnregisterCustomFunction(string name)
+    {
+        // TODO double check if this all that is needed, I'm too tired to think right now.
+        if (!CustomFunctions.Remove(name))
+        {
+            API.LogWarning($"Custom function '{name}' was not registered or already unregistered.");
         }
     }
 
@@ -50,7 +54,12 @@ public static class TrainingFunctionDispatcher
         if (funcType <= (int)app.training.TrainingFuncType.MAX) return PreHookResult.Continue;
 
         // Adjust the FuncType to match our custom range
-        if (CustomFunctions.TryGetValue(funcType, out FunctionDelegate? action))
+        if (!FunctionTypeRegistry.TryGetFunctionName(funcType, out string? functionName))
+        {
+            return PreHookResult.Continue;
+        }
+
+        if (CustomFunctions.TryGetValue(functionName!, out FunctionDelegate? action))
         {
 
             var baseParam = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[3]);
@@ -99,9 +108,9 @@ public static class TrainingFunctionDispatcher
     {
         // Generate a unique FuncType integer for this custom function
 
-        if (FunctionTypeRegistry.TryGetFunctionType(name, out int funcType))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int _))
         {
-            if (!CustomOptionSelectFunctions.TryAdd(funcType, action))
+            if (!CustomOptionSelectFunctions.TryAdd(name, action))
             {
                 API.LogWarning($"Custom option select function '{name}' is already registered.");
             }
@@ -114,11 +123,16 @@ public static class TrainingFunctionDispatcher
 
     public static void RegisterCustomOptionSelectFunction(app.training.TrainingFuncType funcType, FunctionDelegate action)
     {
-        int funcTypeInt = (int)funcType;
-
-        if (!CustomOptionSelectFunctions.TryAdd(funcTypeInt, action))
+        if (FunctionTypeRegistry.TryGetFunctionName((int)funcType, out string? name))
         {
-            API.LogWarning($"Custom option select function for FuncType '{funcType}' is already registered.");
+            if (!CustomOptionSelectFunctions.TryAdd(name!, action))
+            {
+                API.LogWarning($"Custom option select function for FuncType '{funcType}' is already registered.");
+            }
+        }
+        else
+        {
+            API.LogError($"Game function type '{funcType}' is not registered. Call RegisterGameFunctionType first.");
         }
     }
 
@@ -128,8 +142,13 @@ public static class TrainingFunctionDispatcher
         // FuncType argument
         int funcType = (int)args[2];
 
+        if (!FunctionTypeRegistry.TryGetFunctionName(funcType, out string? functionName))
+        {
+            return PreHookResult.Continue;
+        }
+
         // Adjust the FuncType to match our custom range
-        if (CustomOptionSelectFunctions.TryGetValue(funcType, out FunctionDelegate? action))
+        if (CustomOptionSelectFunctions.TryGetValue(functionName!, out FunctionDelegate? action))
         {
             try
             {
@@ -139,7 +158,7 @@ public static class TrainingFunctionDispatcher
                 var viewData = UIHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param.ViewData>(args[4]);
 
                 // Invoke function
-                action.Invoke(baseParam, viewData, rowIndex);
+                action!.Invoke(baseParam, viewData, rowIndex);
             }
             catch (Exception ex)
             {
