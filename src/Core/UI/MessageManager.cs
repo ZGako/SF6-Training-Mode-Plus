@@ -10,7 +10,7 @@ public class CustomMessage
     private readonly string[] _translations = new string[sizeof(via.Language)];
 
     // Cache the Engine-allocated ManagedObject strings
-    private readonly ManagedObject[] _cachedEngineStrings = new ManagedObject[sizeof(via.Language)];
+    private readonly ManagedObject?[] _cachedEngineStrings = new ManagedObject[sizeof(via.Language)];
 
     public CustomMessage(string englishFallback)
     {
@@ -43,7 +43,7 @@ public class CustomMessage
             _cachedEngineStrings[langIndex] = engineString;
         }
 
-        return _cachedEngineStrings[langIndex].GetAddress();
+        return _cachedEngineStrings[langIndex]!.GetAddress();
     }
 
     public void ClearCachedEngineStrings()
@@ -51,6 +51,7 @@ public class CustomMessage
         for (int i = 0; i < _cachedEngineStrings.Length; i++)
         {
             _cachedEngineStrings[i]?.Release();
+            _cachedEngineStrings[i] = null;
         }
     }
 }

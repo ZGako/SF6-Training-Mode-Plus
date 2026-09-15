@@ -13,6 +13,8 @@ public interface IUICustomElementInitialization
 
     // message strings handling and stuff. Also Release the managed object created
     void Clear();
+
+    public app.training.TrainingMenuData GetElementData();
 }
 
 public interface IUIDispatcherRequest : IUIModificationRequest

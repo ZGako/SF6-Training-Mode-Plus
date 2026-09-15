@@ -147,18 +147,10 @@ public static class PauseMenuManager
 
     public static void RebuildUI()
     {
-        // Clear the existing UI:
-        // - Clear all dispatches
-        // - Clear created custom elements
 
         // Clear the function type registry (the functionTypes we want them to be incremental values, so we clear them to refill them properly)
         // Messages are instead cleared by the ModificationRequests themselves, since they don't need to be refilled from scratch and thus rebuild each time the UI is rebuilt
         FunctionTypeRegistry.Clear();
-        // FIXME I don't think clearing the Function dispatchers is needed since they depend on a string and ask the registry for the value
-        // TrainingFunctionDispatcher.Clear();
-        // FIXME spinboxdispatcher instead relies on the traversal path and thus needs to be cleared each time the UI is rebuilt
-        // TODO ^ this comment is out of date, since the spinboxdispatcher now relies on the function type and index instead of the traversal path, so it doesn't need to be cleared each time the UI is rebuilt
-        // SpinBoxDispatcher.Clear();
 
         // traverse the cached data tree as a post-order DFS
 
@@ -180,39 +172,13 @@ public static class PauseMenuManager
             // ------------------------------------------
             // PRE-ORDER / TRAVERSAL PHASE
             // ------------------------------------------
-            if (childIterator < currentNode.Children.Count)
+
+
+            // Restore the original fields of the current element from the cached element before applying any modifications
+            if (childIterator == 0)
             {
-                // Push CURRENT node back, incrementing its iterator
-                nodeStack.Push((currentNode, currentElementMo, childArrayMo, childIterator + 1));
-
-                // Get next child
-                var childPair = currentNode.Children[childIterator];
-                int childIndex = childPair.Index;
-                UICachedDataNode childNode = childPair.Node;
-
-                // Get the child element MO from the array
-                var childArraySys = childArrayMo?.As<_System.Array>();
-                var childElementMo = childArraySys?.GetValue(childIndex) as ManagedObject;
-
-                // Get the child Game Array MO
-                var childGameArrayMo = (childElementMo as IObject)?.GetField("_ChildData") as ManagedObject;
-
-                // Push CHILD node onto the stack
-                nodeStack.Push((childNode, childElementMo, childGameArrayMo, 0));
-            }
-            // ------------------------------------------
-            // POST-ORDER / PROCESSING PHASE
-            // ------------------------------------------
-            else
-            {
-                if (currentNode == RootNode) continue; // Skip root as it doesn't represent an element
-
-
                 if (currentNode.CachedElement != null && currentElementMo != null)
                 {
-
-                    // Restore the original fields of the current element from the cached element before applying any modifications
-
                     // released the childArray of the ingame object, since we might've modified it (by creating a new one) and we don't want to leak memory when reassigning it the cached one.
                     childArrayMo?.ReleaseIfGlobalized();
 
@@ -250,6 +216,43 @@ public static class PauseMenuManager
                         }
                     });
 
+                    childArrayMo = (currentElementMo as IObject)?.GetField("_ChildData") as ManagedObject;
+                }
+
+
+            }
+
+
+            if (childIterator < currentNode.Children.Count)
+            {
+                // Push CURRENT node back, incrementing its iterator
+                nodeStack.Push((currentNode, currentElementMo, childArrayMo, childIterator + 1));
+
+                // Get next child
+                var childPair = currentNode.Children[childIterator];
+                int childIndex = childPair.Index;
+                UICachedDataNode childNode = childPair.Node;
+
+                // Get the child element MO from the array
+                var childArraySys = childArrayMo?.As<_System.Array>();
+                var childElementMo = childArraySys?.GetValue(childIndex) as ManagedObject;
+
+                // Get the child Game Array MO
+                var childGameArrayMo = (childElementMo as IObject)?.GetField("_ChildData") as ManagedObject;
+
+                // Push CHILD node onto the stack
+                nodeStack.Push((childNode, childElementMo, childGameArrayMo, 0));
+            }
+            // ------------------------------------------
+            // POST-ORDER / PROCESSING PHASE
+            // ------------------------------------------
+            else
+            {
+                if (currentNode == RootNode) continue; // Skip root as it doesn't represent an element
+
+
+                if (currentNode.CachedElement != null && currentElementMo != null)
+                {
                     // If there are no modifications, we can release the cached element to free up memory (only after we restored it, which we just did)
 
                     bool hasModifications = currentNode.ReorderRequest != null ||
@@ -266,16 +269,13 @@ public static class PauseMenuManager
                     var currentElement = currentElementMo.As<app.training.TrainingMenuData>();
 
                     // Apply the dispatcher requests to the current element.
+
+                    // in this loop we only ever add dispatcher for original game elements, because of this we want to register the 
+                    // functionType in the function registry ourselves
+                    string functionName = currentNode.Dispatchers.Count > 0 ? FunctionTypeRegistry.RegisterGameFunctionType(currentElement.FuncType) : string.Empty;
                     foreach (var dispatcherRequest in currentNode.Dispatchers)
                     {
-                        if (FunctionTypeRegistry.TryGetFunctionName((int)currentElement!.FuncType, out string? functionName))
-                        {
-                            dispatcherRequest.AddDispatcher(functionName!);
-                        }
-                        else
-                        {
-                            API.LogWarning($"Function type {currentElement!.FuncType} not found in registry. Cannot add dispatcher.");
-                        }
+                        dispatcherRequest.AddDispatcher(functionName);
                     }
 
                     // Gather all the appendElement requests inside a single array of lists
@@ -317,12 +317,12 @@ public static class PauseMenuManager
                         newArr[newIndex++] = newElement;
                     }
 
-                    for (int originalIndex = 0; originalIndex < currentElement.ChildData.Length; originalIndex++)
+                    for (int targetIndex = 0; targetIndex < currentElement.ChildData.Length; targetIndex++)
                     {
-                        int mappedIndex = currentNode.ReorderRequest?.GetMapping(originalIndex) ?? originalIndex;
+                        int originalIndex = currentNode.ReorderRequest?.GetMapping(targetIndex) ?? targetIndex;
 
                         // Copy the original element to the new array at the mapped index
-                        newArr[newIndex++] = currentElement.ChildData[mappedIndex];
+                        newArr[newIndex++] = currentElement.ChildData[originalIndex];
 
                         // Append any new elements for this original index
                         foreach (var newElement in allNewElements[originalIndex + 1])
@@ -355,9 +355,14 @@ public static class PauseMenuManager
 
             if (i == traversalPath.Count - 1)
             {
+                if (currentNode[index] == null)
+                {
+                    currentNode[index] = new UICachedDataNode(null);
+                }
+
                 // cache the element by copying the entire element at the current index
 
-                if (currentNode[index] == null)
+                if (currentNode[index]!.CachedElement == null)
                 {
                     var elementCopyMo = app.training.TrainingMenuData.REFType.CreateInstance(0);
                     var typeDef = app.training.TrainingMenuData.REFType;
@@ -399,7 +404,7 @@ public static class PauseMenuManager
                     });
 
                     // store the copied element in the cached node
-                    currentNode[index] = new UICachedDataNode(elementCopyMo);
+                    currentNode[index]!.CachedElement = elementCopyMo;
                 }
 
                 bool success = modificationRequest switch
@@ -416,7 +421,7 @@ public static class PauseMenuManager
 
             // get the UIData note
             var nextElementMo = gameUIDataArray?.GetValue(index) as ManagedObject;
-            gameUIDataMo = (nextElementMo as IObject)?.GetField("ChildData") as ManagedObject;
+            gameUIDataMo = (nextElementMo as IObject)?.GetField("_ChildData") as ManagedObject;
 
             // get the cached node at the current index
 

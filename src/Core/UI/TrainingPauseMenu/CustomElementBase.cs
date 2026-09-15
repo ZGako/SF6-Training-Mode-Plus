@@ -87,6 +87,7 @@ public class UICustomElementNode(string functionName, IUICustomElementInitializa
             child.Clear();
         }
         _childDataArrayMo?.Release();
+        _childDataArrayMo = null;
 
         _customInitializer.Clear();
 

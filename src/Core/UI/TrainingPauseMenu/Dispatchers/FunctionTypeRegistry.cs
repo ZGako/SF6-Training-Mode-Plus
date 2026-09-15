@@ -17,7 +17,7 @@ public static class FunctionTypeRegistry
         // since the mappings have to be unique, check if the name is already registered
         if (ForwardLookup.TryGetValue(name, out int value))
         {
-            API.LogWarning($"Function type '{name}' is already registered.");
+            API.LogWarning($"Custom Function type '{name}' is already registered.");
             return value;
         }
 
@@ -27,7 +27,7 @@ public static class FunctionTypeRegistry
         return ForwardLookup[name];
     }
 
-    public static void RegisterGameFunctionType(app.training.TrainingFuncType funcType)
+    public static string RegisterGameFunctionType(app.training.TrainingFuncType funcType)
     {
         int funcTypeInt = (int)funcType;
         string name = funcType.ToString();
@@ -35,11 +35,13 @@ public static class FunctionTypeRegistry
         // since the mappings have to be unique, check if the name is already registered
         if (ForwardLookup.TryGetValue(name, out int _))
         {
-            API.LogWarning($"Function type '{name}' is already registered.");
+            API.LogWarning($"Game Function type '{name}' is already registered.");
         }
 
         ForwardLookup[name] = funcTypeInt;
         ReverseLookup[funcTypeInt] = name;
+
+        return name;
     }
 
     public static bool TryGetFunctionType(string name, out int funcType)

@@ -1,17 +1,18 @@
+
 using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 namespace SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
 
-public class OnActionDispatcherInstruction(TrainingFunctionDispatcher.FunctionDelegate functionDelegate) : IUIDispatcherRequest
+public class InputGuideDispatcherRequest(InputGuideDispatcher.InputGuideDelegate action) : IUIDispatcherRequest
 {
-    private readonly TrainingFunctionDispatcher.FunctionDelegate _functionDelegate = functionDelegate;
+    private readonly InputGuideDispatcher.InputGuideDelegate _action = action;
 
     private string? _functionName;
 
     public void AddDispatcher(string functionName)
     {
         _functionName = functionName;
-        TrainingFunctionDispatcher.RegisterCustomFunction(functionName, _functionDelegate);
+        InputGuideDispatcher.RegisterCustomInputGuideFunction(functionName, _action);
     }
 
     public void ClearDispatcher()
@@ -21,6 +22,6 @@ public class OnActionDispatcherInstruction(TrainingFunctionDispatcher.FunctionDe
             API.LogError("Cannot clear dispatcher because it was never added.");
             throw new InvalidOperationException("Cannot clear dispatcher because it was never added.");
         }
-        TrainingFunctionDispatcher.UnregisterCustomFunction(_functionName);
+        InputGuideDispatcher.UnregisterCustomInputGuideFunction(_functionName);
     }
 }

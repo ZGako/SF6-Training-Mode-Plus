@@ -32,6 +32,8 @@ public static class TrainingModePlus
                 {
                     module.Init();
                 }
+
+                PauseMenuManager.RebuildUI();
             },
             onRelease: () =>
             {
@@ -41,8 +43,8 @@ public static class TrainingModePlus
         );
 
         // Register modules
-        // Modules.Add(GameSpeedPlus.Instance);
         Modules.Add(TestingRefactor.Instance);
+        Modules.Add(GameSpeedPlus.Instance);
     }
 
     [PluginExitPoint]
@@ -66,6 +68,8 @@ public static class TrainingModePlus
         {
             module.Unload();
         }
+
+        PauseMenuManager.RebuildUI();
 
         UIHelpers.ClearTrainingPauseMenuDispatchers();
     }

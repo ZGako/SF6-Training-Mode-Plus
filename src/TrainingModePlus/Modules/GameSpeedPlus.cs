@@ -2,114 +2,113 @@
 using SF6_TMP.Core;
 using SF6_TMP.Core.UI;
 using SF6_TMP.Core.UI.TrainingPauseMenu;
+using SF6_TMP.Core.UI.TrainingPauseMenu.CustomElements;
 using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
-using SF6_TMP.Core.UI.TrainingPauseMenu.ElementFactories;
-using SF6_TMP.Core.UI.TrainingPauseMenu.Modifiers;
+using SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
+using SF6_TMP.Core.UI.TrainingPauseMenu.ModificationRequests;
 
 namespace SF6_TMP.TrainingModePlus.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
-    /// <summary>
-    /// Singleton instance of the GameSpeedPlus module. This instance is used to manage the game speed functionality within the TrainingModePlus plugin.
-    /// </summary>
+
     public static GameSpeedPlus Instance { get; private set; } = new GameSpeedPlus();
     private GameSpeedPlus() { }
 
-    private readonly Stack<IUIDynamicModifier> _appliedModifiers = new();
+    private readonly List<IUIModificationRequest> _modificationRequests = [];
 
-    // convenience enum to be able to change permutations in a readable way
-    private enum GameSpeed
-    {
-        SPEED_50,
-        SPEED_60,
-        SPEED_70,
-        SPEED_80,
-        SPEED_90,
-        SPEED_100,
-        SPEED_110,
-        SPEED_120,
-        SPEED_130,
-        SPEED_140,
-        SPEED_150,
-        PAUSE
-    }
-
-    // change mapping here to change the order of the elements in the spinbox
-    private static readonly GameSpeed[] GameSpeedToIndex = [
-        GameSpeed.PAUSE,
-        GameSpeed.SPEED_50,
-        GameSpeed.SPEED_60,
-        GameSpeed.SPEED_70,
-        GameSpeed.SPEED_80,
-        GameSpeed.SPEED_90,
-        GameSpeed.SPEED_100,
-        GameSpeed.SPEED_110,
-        GameSpeed.SPEED_120,
-        GameSpeed.SPEED_130,
-        GameSpeed.SPEED_140,
-        GameSpeed.SPEED_150,
-    ];
-
-    private static readonly GameSpeed[] OriginalGameSpeedOrder = [
-        GameSpeed.SPEED_100,
-        GameSpeed.SPEED_50,
-        GameSpeed.PAUSE,
-        GameSpeed.SPEED_60,
-        GameSpeed.SPEED_70,
-        GameSpeed.SPEED_80,
-        GameSpeed.SPEED_90,
-        GameSpeed.SPEED_110,
-        GameSpeed.SPEED_120,
-        GameSpeed.SPEED_130,
-        GameSpeed.SPEED_140,
-        GameSpeed.SPEED_150
-    ];
+    private static readonly List<int> PathToGamespeedSpinbox = [1, 3];
 
     public void Init()
     {
-        // Initialize the GameSpeedPlus module
         API.LogInfo("Initializing GameSpeedPlus module...");
 
-        // Null stuff guard (annoying to type ?)
-        if (GameSingletonRegistry.TrainingManager == null)
+        // reorder to: Pause, 50%, Standard
+        PauseMenuManager.ReorderRequest reorderRequest = new([2, 1, 0]);
+
+        List<(int, UICustomElementNode)> newElements = CreateGameSpeedElements();
+        AppendElements appendRequest = new(newElements);
+
+        InputGuideDispatcherRequest inputGuideRequest = new(SetCustomGuide);
+        SpinBoxDispatcherRequest spinBoxRequest = new(GetCurrentGameSpeedFunctionName);
+        OptionSelectDispatcherRequest optionSelectRequest = new(ResetToDefaultGameSpeed);
+
+        try
         {
-            API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
-            return;
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, reorderRequest);
+            _modificationRequests.Add(reorderRequest);
+
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, appendRequest);
+            _modificationRequests.Add(appendRequest);
+
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, inputGuideRequest);
+            _modificationRequests.Add(inputGuideRequest);
+
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, spinBoxRequest);
+            _modificationRequests.Add(spinBoxRequest);
+
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, optionSelectRequest);
+            _modificationRequests.Add(optionSelectRequest);
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Error registering modification: {ex.Message}");
         }
 
-        // Add new UI element to the training pause menu
-        const int spinnerIndex = 3;
-
-        var orderArray = GameSpeedToIndex.Select((_, index) => Array.IndexOf(GameSpeedToIndex, OriginalGameSpeedOrder[index])).ToArray();
-
-        // Create a new TrainingDataArrayModifier to add the new element to the menu
-        var menuModifier = new SpinBoxModifier(GameSingletonRegistry.TrainingManager._UIData._MenuData[1]._ChildData[spinnerIndex],
-                                                CreateGameSpeedElements(),
-                                                orderArray,
-                                                new(app.training.TrainingFuncType.ENVIRONMENT, spinnerIndex),
-                                                GetCurrentGameSpeedIndex);
-
-        FunctionTypeRegistry.RegisterGameFunctionType(app.training.TrainingFuncType.ENV_GAME_SPEED);
-
-        TrainingFunctionDispatcher.RegisterCustomOptionSelectFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, ResetToDefaultGameSpeed);
-
-        InputGuideDispatcher.RegisterCustomInputGuideFunction(app.training.TrainingFuncType.ENV_GAME_SPEED, SetCustomGuide);
-
-        _appliedModifiers.Push(menuModifier);
-
-        API.LogInfo("GameSpeedPlus module initialized successfully.");
     }
 
     public void Unload()
     {
-        while (_appliedModifiers.Count > 0)
+        API.LogInfo("Unloading GameSpeedPlus module...");
+        foreach (var request in _modificationRequests)
         {
-            var uiModifier = _appliedModifiers.Pop();
-            uiModifier.Restore();
+            PauseMenuManager.UnregisterModification(request);
         }
     }
 
+    /// <summary>
+    /// Creates a list of new game speed elements to be added to the training pause menu. Each element is associated with a specific game speed and has its own message ID, function name, and index to attach to in the menu.
+    /// </summary>
+    /// <returns></returns>
+    private static List<(int, UICustomElementNode)> CreateGameSpeedElements()
+    {
+        var newElements = new List<(int, UICustomElementNode)>();
+
+        // Create the new game speed options
+        var speedOptionData = new (app.training.GameSpeed speed, string messageID, string functionName, int attachToIndex)[]
+        {
+            (app.training.GameSpeed.SPEED_60, "60%", "ENV_GAME_SPEED_60%", 2),
+            (app.training.GameSpeed.SPEED_70, "70%", "ENV_GAME_SPEED_70%", 2),
+            (app.training.GameSpeed.SPEED_80, "80%", "ENV_GAME_SPEED_80%", 2),
+            (app.training.GameSpeed.SPEED_90, "90%", "ENV_GAME_SPEED_90%", 2),
+            (app.training.GameSpeed.SPEED_110, "110%", "ENV_GAME_SPEED_110%", 1),
+            (app.training.GameSpeed.SPEED_120, "120%", "ENV_GAME_SPEED_120%", 1),
+            (app.training.GameSpeed.SPEED_130, "130%", "ENV_GAME_SPEED_130%", 1),
+            (app.training.GameSpeed.SPEED_140, "140%", "ENV_GAME_SPEED_140%", 1),
+            (app.training.GameSpeed.SPEED_150, "150%", "ENV_GAME_SPEED_150%", 1),
+        };
+
+        foreach (var (speed, messageID, functionName, attachToIndex) in speedOptionData)
+        {
+            var message = new CustomMessage(messageID);
+            var initializer = new SpinnerOptionTextInitializer(message);
+            var newElement = new UICustomElementNode(functionName, initializer);
+
+            // Register the dispatcher for this game speed option
+            FunctionDispatcherRequest dispatcherRequest = new((_, _, _) => ChangeGameSpeed(speed));
+            newElement.AddDispatcher(dispatcherRequest);
+
+            // Add the new element to the list with its index
+            newElements.Add((attachToIndex, newElement));
+        }
+
+        return newElements;
+    }
+
+    /// <summary>
+    /// Captured function to change the game speed. This function accesses the TrainingManager singleton and modifies the game speed settings based on the provided speed index.
+    /// </summary>
+    /// <param name="speedIndex"></param>
     private static void ChangeGameSpeed(app.training.GameSpeed speedIndex)
     {
         if (GameSingletonRegistry.TrainingManager == null)
@@ -143,104 +142,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         API.LogError("Failed to change game speed. Could not access the necessary fields.");
     }
 
-
-    private static int GetCurrentGameSpeedIndex()
-    {
-        if (GameSingletonRegistry.TrainingManager == null)
-        {
-            API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
-            return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-        }
-
-        // get nested members of the singleton for easier access
-        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
-        var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
-
-        if (entriesArray == null || entriesArray.Length <= 10)
-        {
-            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
-            return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-        }
-
-        var entry10 = entriesArray.GetValue(10) as ManagedObject;
-        var tf_OS = (entry10 as IObject)?.GetField("value") as ManagedObject;
-        var gameData = ((tf_OS as IObject)?.GetField("_GameData") as ManagedObject)?.As<app.training.tf_OtherSetting.GameLocalData>();
-
-        if (gameData == null)
-        {
-            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
-            return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-        }
-
-        if (gameData.IsMenuPause)
-        {
-            return Array.IndexOf(GameSpeedToIndex, GameSpeed.PAUSE);
-        }
-
-        if (GameSingletonRegistry.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
-        {
-            var currentSpeed = GameSingletonRegistry.TrainingManager.TData.OtherSetting.OS_Game_Speed;
-            switch (currentSpeed)
-            {
-                case app.training.GameSpeed.SPEED_50:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_50);
-                case app.training.GameSpeed.SPEED_60:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_60);
-                case app.training.GameSpeed.SPEED_70:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_70);
-                case app.training.GameSpeed.SPEED_80:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_80);
-                case app.training.GameSpeed.SPEED_90:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_90);
-                case app.training.GameSpeed.SPEED_110:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_110);
-                case app.training.GameSpeed.SPEED_120:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_120);
-                case app.training.GameSpeed.SPEED_130:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_130);
-                case app.training.GameSpeed.SPEED_140:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_140);
-                case app.training.GameSpeed.SPEED_150:
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_150);
-                default:
-                    API.LogWarning($"Unknown game speed: {currentSpeed}. Defaulting to index 0.");
-                    return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-            }
-        }
-
-        return Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-    }
-
-    private static void ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
-    {
-        var uiFlowParam = ManagedProxy<app.training.UIFlowTrainingMenu.Param>.Create(baseParam);
-        var uipart = ManagedProxy<app.UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
-        uipart.Num = Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100);
-        var scrollList = ManagedProxy<app.UIPartsScrollList>.Create(uipart.GetChild(0));
-        scrollList.SetSelectedIndex(Array.IndexOf(GameSpeedToIndex, GameSpeed.SPEED_100), false);
-        uiFlowParam.UpdateSpinBox(rowIndex, true, true);
-        uiFlowParam.OnUpdateSpin();
-    }
-
-    private static List<app.training.TrainingMenuData> CreateGameSpeedElements()
-    {
-        var elements = new List<app.training.TrainingMenuData>
-        {
-            // Create a new TrainingMenuData element for the game speed adjustment
-            TextElementFactory.Create("60%", "GAMESPEED_60", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_60)),
-            TextElementFactory.Create("70%", "GAMESPEED_70", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_70)),
-            TextElementFactory.Create("80%", "GAMESPEED_80", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_80)),
-            TextElementFactory.Create("90%", "GAMESPEED_90", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_90)),
-            TextElementFactory.Create("110%", "GAMESPEED_110", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_110)),
-            TextElementFactory.Create("120%", "GAMESPEED_120", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_120)),
-            TextElementFactory.Create("130%", "GAMESPEED_130", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_130)),
-            TextElementFactory.Create("140%", "GAMESPEED_140", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_140)),
-            TextElementFactory.Create("150%", "GAMESPEED_150", (baseParam, viewData, rowIndex) => ChangeGameSpeed(app.training.GameSpeed.SPEED_150))
-        };
-
-        return elements;
-    }
-
+    // delegate for the custom guide dispatcher
     private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
     {
         var customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
@@ -253,6 +155,129 @@ public class GameSpeedPlus : ITrainingModePlusModule
         MessageManager.SetGuid(customGuideDataMo, "<MessageId>k__BackingField", newMessage.Id);
 
         outInputGuideDataList.Add(customGuideData);
+    }
+
+    private static int GetCurrentGameSpeedFunctionName(app.training.UIFlowTrainingMenu.Param _)
+    {
+        int defaultGameSpeed = (int)app.training.TrainingFuncType.ENV_GAME_SPEED_0;
+
+        if (GameSingletonRegistry.TrainingManager == null)
+        {
+            API.LogError("TrainingManager is null. Cannot retrieve current game speed.");
+            return defaultGameSpeed;
+        }
+
+        // get nested members of the singleton for easier access
+        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
+        var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
+
+        if (entriesArray == null || entriesArray.Length <= 10)
+        {
+            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
+            return defaultGameSpeed;
+        }
+
+        var entry10 = entriesArray.GetValue(10) as ManagedObject;
+        var tf_OS = (entry10 as IObject)?.GetField("value") as ManagedObject;
+        var gameData = ((tf_OS as IObject)?.GetField("_GameData") as ManagedObject)?.As<app.training.tf_OtherSetting.GameLocalData>();
+
+        if (gameData == null)
+        {
+            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
+            return defaultGameSpeed;
+        }
+
+        if (gameData.IsMenuPause)
+        {
+            return (int)app.training.TrainingFuncType.ENV_GAME_SPEED_2;
+        }
+
+        if (GameSingletonRegistry.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
+        {
+            var currentSpeed = GameSingletonRegistry.TrainingManager.TData.OtherSetting.OS_Game_Speed;
+
+            string resultingFunctionName;
+
+            switch (currentSpeed)
+            {
+                case app.training.GameSpeed.SPEED_50:
+                    return (int)app.training.TrainingFuncType.ENV_GAME_SPEED_1;
+                case app.training.GameSpeed.SPEED_60:
+                    resultingFunctionName = "ENV_GAME_SPEED_60%";
+                    break;
+                case app.training.GameSpeed.SPEED_70:
+
+                    resultingFunctionName = "ENV_GAME_SPEED_70%";
+                    break;
+                case app.training.GameSpeed.SPEED_80:
+                    resultingFunctionName = "ENV_GAME_SPEED_80%";
+                    break;
+                case app.training.GameSpeed.SPEED_90:
+                    resultingFunctionName = "ENV_GAME_SPEED_90%";
+                    break;
+                case app.training.GameSpeed.SPEED_110:
+                    resultingFunctionName = "ENV_GAME_SPEED_110%";
+                    break;
+                case app.training.GameSpeed.SPEED_120:
+                    resultingFunctionName = "ENV_GAME_SPEED_120%";
+                    break;
+                case app.training.GameSpeed.SPEED_130:
+                    resultingFunctionName = "ENV_GAME_SPEED_130%";
+                    break;
+                case app.training.GameSpeed.SPEED_140:
+                    resultingFunctionName = "ENV_GAME_SPEED_140%";
+                    break;
+                case app.training.GameSpeed.SPEED_150:
+                    resultingFunctionName = "ENV_GAME_SPEED_150%";
+                    break;
+                default:
+                    API.LogWarning($"Unknown game speed: {currentSpeed}. Defaulting to index 0.");
+                    return defaultGameSpeed;
+            }
+
+            if (FunctionTypeRegistry.TryGetFunctionType(resultingFunctionName, out int funcType))
+            {
+                return funcType;
+            }
+            else
+            {
+                API.LogWarning($"Function name '{resultingFunctionName}' not found in FunctionTypeRegistry. Defaulting to index 0.");
+                return defaultGameSpeed;
+            }
+        }
+
+        return defaultGameSpeed;
+    }
+
+    private static void ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
+    {
+        // we first want to find the index of the default game speed
+        var childArray = viewData.Data.ChildData;
+        int index = -1;
+        for (int i = 0; i < childArray.Count; i++)
+        {
+            var childData = childArray[i];
+            if (childData.FuncType == app.training.TrainingFuncType.ENV_GAME_SPEED_0)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        var uiFlowParam = ManagedProxy<app.training.UIFlowTrainingMenu.Param>.Create(baseParam);
+        var uipart = ManagedProxy<app.UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
+
+        if (uipart.Num == index)
+        {
+            // already at default, no need to change
+            return;
+        }
+
+        uipart.Num = index;
+        var scrollList = ManagedProxy<app.UIPartsScrollList>.Create(uipart.GetChild(0));
+        scrollList.SetSelectedIndex(index, false);
+        uiFlowParam.UpdateSpinBox(rowIndex, true, true);
+        uiFlowParam.OnUpdateSpin();
     }
 
 }

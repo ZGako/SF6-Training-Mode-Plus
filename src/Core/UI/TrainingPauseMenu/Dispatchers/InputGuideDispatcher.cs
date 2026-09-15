@@ -38,6 +38,11 @@ public static class InputGuideDispatcher
         }
     }
 
+    /// <summary>
+    /// legacy method as we now register the game's own FuncType into the function registry as well.
+    /// </summary>
+    /// <param name="funcType"></param>
+    /// <param name="action"></param>
     public static void RegisterCustomInputGuideFunction(app.training.TrainingFuncType funcType, InputGuideDelegate action)
     {
         if (FunctionTypeRegistry.TryGetFunctionName((int)funcType, out string? name))
@@ -50,6 +55,14 @@ public static class InputGuideDispatcher
         else
         {
             API.LogError($"Custom input guide function for FuncType '{funcType}' is not registered. Call RegisterNewFunctionType first.");
+        }
+    }
+
+    public static void UnregisterCustomInputGuideFunction(string name)
+    {
+        if (!CustomInputGuideDelegates.Remove(name))
+        {
+            API.LogWarning($"Custom input guide function '{name}' was not registered.");
         }
     }
 

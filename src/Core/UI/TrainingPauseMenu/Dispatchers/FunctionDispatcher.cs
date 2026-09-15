@@ -5,14 +5,12 @@ namespace SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 public static class TrainingFunctionDispatcher
 {
     // A dictionary mapping our custom FuncType integers to C# lambdas
-
-    // TODO change all dispatcher dictionaries to <string, FunctionDelegate> and use the function name as the key instead of the FuncType integer.
     private static readonly Dictionary<string, FunctionDelegate> CustomFunctions = [];
 
     private static readonly Dictionary<string, FunctionDelegate> CustomOptionSelectFunctions = [];
 
     // delegate type for all functions are the same signature
-    // TODO consider have the function return a bool to indicate if the game should continue processing the function or not. This would allow for more flexibility in custom functions.
+    // TODO add a return value from the dispatcher that determines whether or not the menu should close. This would allow for more flexibility in custom functions.
     public delegate void FunctionDelegate(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex);
 
     // Function specific methods
@@ -53,7 +51,6 @@ public static class TrainingFunctionDispatcher
 
         if (funcType <= (int)app.training.TrainingFuncType.MAX) return PreHookResult.Continue;
 
-        // Adjust the FuncType to match our custom range
         if (!FunctionTypeRegistry.TryGetFunctionName(funcType, out string? functionName))
         {
             return PreHookResult.Continue;
@@ -136,6 +133,14 @@ public static class TrainingFunctionDispatcher
         }
     }
 
+    public static void UnregisterCustomOptionSelectFunction(string name)
+    {
+        if (!CustomOptionSelectFunctions.Remove(name))
+        {
+            API.LogWarning($"Custom option select function '{name}' was not registered or already unregistered.");
+        }
+    }
+
     [MethodHook(typeof(app.training.TrainingMenuFunc), "OptionSelectFunction(app.training.TrainingFuncType, app.training.BaseParam, app.training.UIFlowTrainingMenu.Param.ViewData, System.Int32)", MethodHookType.Pre)]
     private static PreHookResult OnOptionSelectFunctionPre(Span<ulong> args)
     {
@@ -182,7 +187,7 @@ public static class TrainingFunctionDispatcher
     {
         if (s_handledCustomOptionSelectFunction)
         {
-            // output is Boolean = true
+            // output is Boolean, determines whether or not the menu should close.
             retval = 0;
 
             // Reset for the next call

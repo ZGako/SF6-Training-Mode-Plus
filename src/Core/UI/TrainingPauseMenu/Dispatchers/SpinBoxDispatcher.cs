@@ -7,40 +7,42 @@ namespace SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 // so actually this can get the FuncType through the viewlist[index].Data.FuncType, so I don't even need the location.
 public static class SpinBoxDispatcher
 {
-    // needs to do some more complex things since the initspinbox function doesn't explicitly indicate which spinbox it is, so I basically have to keep track of which "tab" and "index" the spinbox is in.
-    public struct SpinInfoLocation
-    {
-        public int TabIndex;
-        public int SpinBoxIndex;
 
-        public SpinInfoLocation(app.training.TrainingFuncType nativeTabFuncType, int spinBoxIndex)
-        {
-            TabIndex = (int)nativeTabFuncType;
-            SpinBoxIndex = spinBoxIndex;
-        }
-
-        public SpinInfoLocation(int customTabFuncType, int spinBoxIndex)
-        {
-            TabIndex = customTabFuncType;
-            SpinBoxIndex = spinBoxIndex;
-        }
-    }
-
-    // delegate for the custom initialization logic
-    public delegate int SpinBoxInitDelegate();
+    /// <summary>
+    /// Delegate type for custom spinbox initialization logic. This should return the FunctionName of the selected option for the spinbox.
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
+    public delegate int SpinBoxInitDelegate(app.training.UIFlowTrainingMenu.Param param);
 
     // since the initialization of the spinbox is determined by the game's logic, it doesn't match with our modified/added spinboxes, so we need to dispatch custom initialization logic
-    private static readonly Dictionary<SpinInfoLocation, SpinBoxInitDelegate> CustomInitializations = [];
+    private static readonly Dictionary<string, SpinBoxInitDelegate> CustomInitializations = [];
 
-    public static void RegisterCustomSpinBoxInitialization(SpinInfoLocation location, SpinBoxInitDelegate initDelegate)
+    public static void RegisterCustomSpinBoxInitialization(string name, SpinBoxInitDelegate initDelegate)
     {
-        if (!CustomInitializations.TryAdd(location, initDelegate))
+        if (FunctionTypeRegistry.TryGetFunctionType(name, out int _))
         {
-            API.LogWarning($"Custom initialization for tab {location.TabIndex}, index {location.SpinBoxIndex} is already registered.");
+            if (!CustomInitializations.TryAdd(name, initDelegate))
+            {
+                API.LogWarning($"Custom initialization for '{name}' is already registered.");
+            }
+        }
+        else
+        {
+            API.LogError($"Custom initialization '{name}' is not registered. Call RegisterNewFunctionType first.");
         }
     }
 
+    public static void UnregisterCustomSpinBoxInitialization(string name)
+    {
+        if (!CustomInitializations.Remove(name))
+        {
+            API.LogWarning($"Custom initialization for '{name}' was not registered.");
+        }
+    }
 
+    // FIXME eventually I'll have to relook at the whole caller function and indices thing which isn't very clear
+    // but for now it's fine
     [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSpinBox(System.Int32)", MethodHookType.Pre)]
     private static PreHookResult OnInitSpinBoxPre(Span<ulong> args)
     {
@@ -52,22 +54,35 @@ public static class SpinBoxDispatcher
             return PreHookResult.Continue;
         }
 
-        var currentTMD = currentObject.CurrentParentData;
-        if (currentTMD == null)
+        int currentIndex = (int)args[2];
+
+        // get the current spinbox
+        if (currentIndex < 0 || currentIndex >= currentObject.ViewDataList.Count)
         {
-            API.LogWarning("Failed to retrieve current UIFlowTrainingMenu.Param object.");
             return PreHookResult.Continue;
         }
 
-        // functabtype basically works as a tab index
-        int currentTabFuncType = (int)currentTMD.FuncType;
+        var currentSpinBox = currentObject.ViewDataList[currentIndex].Data;
 
-        int currentIndex = (int)args[2];
+        if (!FunctionTypeRegistry.TryGetFunctionName((int)currentSpinBox.FuncType, out string? functionName))
+        {
+            return PreHookResult.Continue;
+        }
 
-        if (CustomInitializations.TryGetValue(new(currentTabFuncType, currentIndex), out SpinBoxInitDelegate? initDelegate))
+        if (CustomInitializations.TryGetValue(functionName!, out SpinBoxInitDelegate? initDelegate))
         {
             // Invoke the custom initialization logic
-            currentObject.ViewDataList[currentIndex].Index = initDelegate.Invoke();
+            int selectedFuncType = initDelegate.Invoke(currentObject);
+
+            // search the childdata for the element of the selectedFuncType and set the index to that element
+            for (int i = 0; i < currentSpinBox.ChildData.Count; i++)
+            {
+                if ((int)currentSpinBox.ChildData[i].FuncType == selectedFuncType)
+                {
+                    currentObject.ViewDataList[currentIndex].Index = i;
+                    break;
+                }
+            }
         }
 
         return PreHookResult.Continue;
