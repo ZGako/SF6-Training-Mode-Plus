@@ -42,9 +42,14 @@ public static class TrainingModePlus
             }
         );
 
+        GameSingletonRegistry.RegisterUIAgentManager(
+            onReady: () => { }
+        );
+
         // Register modules
         Modules.Add(TestingRefactor.Instance);
         Modules.Add(GameSpeedPlus.Instance);
+        // Modules.Add(TrainingParametersAndRandomizer.Instance);
     }
 
     [PluginExitPoint]

@@ -11,11 +11,14 @@ public static class GameSingletonRegistry
     public enum GameSingletonTypes
     {
         TrainingManager,
+        UIAgentManager,
         // Add others here later
     }
 
     // Publicly accessible singleton instances
     public static app.training.TrainingManager? TrainingManager { get; private set; }
+
+    public static app.UIAgentManager? UIAgentManager { get; private set; }
 
     private static readonly Dictionary<GameSingletonTypes, bool> SingletonReadyStates = [];
     private static readonly Dictionary<GameSingletonTypes, Tuple<Func<bool>, Action, Action?>> RegisteredSingletons = [];
@@ -87,6 +90,21 @@ public static class GameSingletonRegistry
             }
         }
         return PreHookResult.Continue;
+    }
+
+    public static void RegisterUIAgentManager(Action onReady, Action? onRelease = null)
+    {
+        lock (RegistryLock)
+        {
+            RegisteredSingletons[GameSingletonTypes.UIAgentManager] = new Tuple<Func<bool>, Action, Action?>(() =>
+            {
+                var uiAgentManager = API.GetManagedSingletonT<app.UIAgentManager>();
+                if (uiAgentManager == null) return false;
+
+                UIAgentManager = uiAgentManager;
+                return true;
+            }, onReady, onRelease);
+        }
     }
 
     /// <summary>
