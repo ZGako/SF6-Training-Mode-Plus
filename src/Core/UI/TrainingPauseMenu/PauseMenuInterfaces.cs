@@ -5,7 +5,11 @@ public interface IUIDynamicModifier
     void Restore();
 }
 
-public interface IUIModificationRequest { }
+public interface IUIModificationRequest
+{
+    IUIModificationRequest Clone();
+
+}
 
 public interface IUICustomElementInitialization
 {
@@ -25,3 +29,25 @@ public interface IUIDispatcherRequest : IUIModificationRequest
     void ClearDispatcher();
 }
 
+
+public abstract class SingleUseModificationRequest : IUIModificationRequest
+{
+    private bool _isConsumed = false;
+
+    public abstract IUIModificationRequest Clone();
+
+    public void Consume()
+    {
+        if (_isConsumed)
+        {
+            throw new InvalidOperationException("This modification request has already been consumed.");
+        }
+
+        _isConsumed = true;
+    }
+
+    public void Unconsume()
+    {
+        _isConsumed = false;
+    }
+}

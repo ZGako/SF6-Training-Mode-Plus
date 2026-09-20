@@ -4,7 +4,7 @@ using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 namespace SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
 
-public class SpinBoxDispatcherRequest(SpinBoxDispatcher.SpinBoxInitDelegate action) : IUIDispatcherRequest
+public class SpinBoxDispatcherRequest(SpinBoxDispatcher.SpinBoxInitDelegate action) : SingleUseModificationRequest, IUIDispatcherRequest
 {
     private readonly SpinBoxDispatcher.SpinBoxInitDelegate _action = action;
 
@@ -24,5 +24,10 @@ public class SpinBoxDispatcherRequest(SpinBoxDispatcher.SpinBoxInitDelegate acti
             throw new InvalidOperationException("Cannot clear dispatcher because it was never added.");
         }
         SpinBoxDispatcher.UnregisterCustomSpinBoxInitialization(_functionName);
+    }
+
+    public override SpinBoxDispatcherRequest Clone()
+    {
+        return new SpinBoxDispatcherRequest(_action);
     }
 }

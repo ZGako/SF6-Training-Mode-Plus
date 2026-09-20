@@ -11,12 +11,6 @@ namespace SF6_TMP.Core.UI.TrainingPauseMenu;
 /// </summary>
 public static class PauseMenuManager
 {
-    private static app.training.TrainingMenuData_Array1D GetUIData()
-    {
-        return GameSingletonRegistry.TrainingManager == null
-            ? throw new InvalidOperationException("TrainingManager is not initialized. Cannot retrieve UI data.")
-            : GameSingletonRegistry.TrainingManager.UIData.MenuData;
-    }
 
     private static ManagedObject? GetUIDataMo()
     {
@@ -139,6 +133,12 @@ public static class PauseMenuManager
                 ? throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of bounds for the new order list.")
                 : NewOrder.IndexOf(index);
         }
+
+        public IUIModificationRequest Clone()
+        {
+            return new ReorderRequest([.. NewOrder]);
+        }
+
     }
 
     private static readonly Dictionary<IUIModificationRequest, List<int>> ModificationRequestPaths = []; // maps modification requests to their traversal paths in the cached data tree
@@ -414,7 +414,14 @@ public static class PauseMenuManager
                     IUIDispatcherRequest dispatcherRequest => currentNode[index]!.RequestDispatcher(dispatcherRequest),
                     _ => throw new InvalidOperationException($"Unknown modification request type: {modificationRequest.GetType().Name}")
                 };
-                if (success) ModificationRequestPaths[modificationRequest] = traversalPath;
+                if (success)
+                {
+                    ModificationRequestPaths[modificationRequest] = traversalPath;
+                    if (modificationRequest is SingleUseModificationRequest singleUseRequest)
+                    {
+                        singleUseRequest.Consume();
+                    }
+                }
                 else API.LogWarning($"Modification request of type {modificationRequest.GetType().Name} is already registered at index {index}. Cannot register again.");
                 return;
             }
@@ -450,6 +457,11 @@ public static class PauseMenuManager
         {
             API.LogWarning($"Modification request of type {modificationRequest.GetType().Name} is not registered. Cannot unregister.");
             return;
+        }
+
+        if (modificationRequest is SingleUseModificationRequest singleUseRequest)
+        {
+            singleUseRequest.Unconsume();
         }
 
         // traverse the cached tree to find the modification request and remove it

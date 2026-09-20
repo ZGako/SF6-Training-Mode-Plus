@@ -22,7 +22,7 @@ public class TestingRefactor : ITrainingModePlusModule
 
     public void Init()
     {
-        FunctionDispatcherRequest dispatcherRequest = new((_, _, _) => TestForItem());
+        FunctionDispatcherRequest dispatcherRequest = new((_, _, _) => { });
         UICustomElementNode newElement = new("TestRowButton",
                                             new RowButtonInitializer(new CustomMessage("Restart Battle and Randomize"),
                                                                      new CustomMessage("Apply current settings, randomizing the appropriate settings, and restart the battle.")));
@@ -103,7 +103,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager address: {(uiAgent as IObject).GetAddress():X}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager address: {(uiAgent as IObject).GetAddress()} and {(uiAgent as IObject).GetAddress():X}");
 
             var partsList = uiAgent._List;
             if (partsList == null)
@@ -112,7 +112,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List has address: {(partsList as IObject).GetAddress():X}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List has address: {(partsList as IObject).GetAddress()}");
 
             var partItem4 = partsList[4];
             if (partItem4 == null)
@@ -120,6 +120,8 @@ public class TestingRefactor : ITrainingModePlusModule
                 API.LogWarning("UIAgentManager._Entries[64].Agent._PartsManager._List[4] is null.");
                 return;
             }
+
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4] has address: {(partItem4 as IObject).GetAddress()} and {(partItem4 as IObject).GetAddress():X}");
 
             // get partItem4 as a app.UIPartsGroupScroll
             // then cast it to app.UIPartsGroup
@@ -144,6 +146,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 API.LogWarning("UIAgentManager._Entries[64].Agent._PartsManager._List[4]._Children[2] is null.");
                 return;
             }
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4]._Children[2] has address: {(childItem2 as IObject).GetAddress()} and {(childItem2 as IObject).GetAddress():X}");
             // from that, we have _FocusIndex
             var focusIndex = childItem2._FocusIndex;
             // then we get _Children[_FocusIndex] as app.UIPartsSpin (only in this case)  
@@ -161,7 +164,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"Final address up until now: {(selectItem as IObject).GetAddress()}");
+            API.LogInfo($"Final address up until now: {(selectItem as IObject).GetAddress()} and {(selectItem as IObject).GetAddress():X}");
 
             // from that we can try to start the walks
             // 1. Invoke the native method
@@ -220,25 +223,38 @@ public class TestingRefactor : ITrainingModePlusModule
                 }
             }
 
+            var textChildMo = childrenArray.GetValue(5) as ManagedObject;
+            if (textChildMo == null)
+            {
+                API.LogWarning("Child at index 5 is null or not a ManagedObject.");
+                return;
+            }
+
+            var textChild = textChildMo.As<via.gui.Text>();
+            if (textChild == null)
+            {
+                API.LogWarning("Child at index 5 is not a via.gui.Text.");
+                return;
+            }
+            API.LogInfo($"Child has {textChildMo.GetTypeDefinition().GetName()} type.");
             // 1. Create your new UI element (let's use a Panel as a container)
-            var newChildMo = TDB.Get().FindType("via.gui.Panel").CreateInstance(0);
+            var newChildMo = TDB.Get().FindType("via.gui.Text").CreateInstance(0);
 
             // 2. CRITICAL: Tell the engine to keep this object alive permanently.
             // If you skip this, the C# GC will eventually sweep it, and the game will hard crash[cite: 3].
             newChildMo.Globalize();
 
             // (Optional) Cast it to a typed proxy so you can easily configure it before attaching
-            var newPanel = newChildMo.As<via.gui.Panel>();
-            if (newPanel != null)
+            var newText = newChildMo.As<via.gui.Text>();
+            if (newText != null)
             {
-                // You would normally set sizes/anchors here so it doesn't render as a 0x0 invisible box
+                textChild.copyProperties(newText);
+                newText.Message = "Testing this new child injection!";
             }
 
             // 3. Invoke the addChild method you found on your selectItem!
             // We pass the exact signature to ensure the engine resolves the correct native function[cite: 3].
-            (selectItem as IObject).Call("addChild(via.gui.PlayObject)", newChildMo);
-
-            API.LogInfo("Successfully injected a new child into selectItem!");
+            // (selectItem as IObject).Call("addChild(via.gui.PlayObject)", newChildMo);
 
 
         }
@@ -262,5 +278,169 @@ public class TestingRefactor : ITrainingModePlusModule
         {
             API.LogError($"Error rebuilding UI during unload: {ex.Message}");
         }
+    }
+
+    [MethodHook(typeof(app.UIPartsItem), nameof(app.UIPartsItem.SetupLayout), MethodHookType.Pre)]
+    private static PreHookResult OnSetupLayoutPre(Span<ulong> args)
+    {
+        // return PreHookResult.Continue;
+        var instance = ManagedObject.ToManagedObject(args[1]);
+        if (instance == null) return PreHookResult.Continue;
+
+        var spinItem = instance.As<app.UIPartsSpin>();
+        if (spinItem == null) return PreHookResult.Continue;
+
+        try
+        {
+            var selectItemMo = spinItem._SelectItem as IObject;
+            var selectItem = selectItemMo?.As<via.gui.Control>();
+            if (selectItem == null) return PreHookResult.Continue;
+
+            // NEW: Check the name of the via.gui.Control to ensure it's the exact one we want
+            var selectItemName = selectItemMo.Call("get_Name") as string;
+            if (selectItemName != "p_Spin_1_h")
+            {
+                // This is a UIPartsSpin, but not the p_Spin_1_h one. Skip it.
+                return PreHookResult.Continue;
+            }
+
+            API.LogInfo($"[SetupLayout Pre] Found target UIPartsSpin for {selectItemName} @ sdk.to_managed_object({instance.GetAddress()}) or 0x{instance.GetAddress():X}");
+
+            var controlType = via.gui.PlayObject.REFType.RuntimeType;
+            var childrenObj = selectItemMo.Call("getChildren(System.Type)", controlType) as ManagedObject;
+            var childrenArray = childrenObj?.As<_System.Array>();
+
+            if (childrenArray != null)
+            {
+                API.LogInfo($"  -> _SelectItem currently has {childrenArray.Length} native children.");
+
+                // Proceed with your cloning and injection logic here!
+                var textChildMo = childrenArray.GetValue(5) as ManagedObject;
+                if (textChildMo == null)
+                {
+                    API.LogWarning("Child at index 5 is null or not a ManagedObject.");
+                    return PreHookResult.Continue;
+                }
+
+                var textChild = textChildMo.As<via.gui.Text>();
+                if (textChild == null)
+                {
+                    API.LogWarning("Child at index 5 is not a via.gui.Text.");
+                    return PreHookResult.Continue;
+                }
+                API.LogInfo($"Child has {textChildMo.GetTypeDefinition().GetName()} type.");
+
+                var panelChildMo = childrenArray.GetValue(4) as ManagedObject;
+                if (panelChildMo == null)
+                {
+                    API.LogWarning("Child at index 4 is null or not a ManagedObject.");
+                    return PreHookResult.Continue;
+                }
+                var panelChild = panelChildMo.As<via.gui.Panel>();
+                if (panelChild == null)
+                {
+                    API.LogWarning("Child at index 4 is not a via.gui.Panel.");
+                    return PreHookResult.Continue;
+                }
+
+                var scrollChildMo = childrenArray.GetValue(2) as ManagedObject;
+                if (scrollChildMo == null)
+                {
+                    API.LogWarning("Child at index 2 is null or not a ManagedObject.");
+                    return PreHookResult.Continue;
+                }
+
+                var scrollListChild = scrollChildMo.As<via.gui.ScrollList>();
+                if (scrollListChild == null)
+                {
+                    API.LogWarning("Child at index 2 is not a via.gui.ScrollList.");
+                    return PreHookResult.Continue;
+                }
+
+                // get the schollListChild's _Children[2] as via.gui.Panel
+                var scrollListChildChildrenMo = scrollChildMo.Call("getChildren(System.Type)", controlType) as ManagedObject;
+                var scrollListChildChildrenArray = scrollListChildChildrenMo?.As<_System.Array>();
+                if (scrollListChildChildrenArray == null)
+                {
+                    API.LogWarning("Failed to get children of scrollListChild.");
+                    return PreHookResult.Continue;
+                }
+
+                var panelChild2Mo = scrollListChildChildrenArray.GetValue(2) as ManagedObject;
+                if (panelChild2Mo == null)
+                {
+                    API.LogWarning("Child at index 2 of scrollListChild is null or not a ManagedObject.");
+                    return PreHookResult.Continue;
+                }
+                var panelChild2 = panelChild2Mo.As<via.gui.Panel>();
+                if (panelChild2 == null)
+                {
+                    API.LogWarning("Child at index 2 of scrollListChild is not a via.gui.Panel.");
+                    return PreHookResult.Continue;
+                }
+
+                // (Optional) Cast it to a typed proxy so you can easily configure it before attaching
+                via.gui.Element? newText = null;
+                via.gui.Control? newPanel = null;
+
+
+                newText = textChild.duplicate("e_txt_0");
+                newText.Priority = 1;
+                var te = ManagedProxy<via.gui.Text>.Create(newText);
+                te.Message = "This is a test message for the new text child!";
+                // newText.Message = "This is a test message for the new text child!";
+                newPanel = panelChild2.duplicate("othericon");
+                // CompareGUIProperties(textChildMo, newChildMo);
+                // (newText as via.gui.Text).Message = "fkdajsf;ldksajf;ldaskjfdas <ICON KeyQ>";
+                var newPos = via.vec3.REFType.CreateValueType().As<via.vec3>();
+                newPos.x = 320;
+                newPos.y = 0;
+                newPos.z = 0;
+                newPanel.Position = newPos;
+
+                var childOfNewPanelMo = (newPanel as IObject)?.Call("getChildren(System.Type)", controlType) as ManagedObject;
+                var childOfNewPanelArray = childOfNewPanelMo?.As<_System.Array>();
+
+                var childOfNewPanel = childOfNewPanelArray?.GetValue(0) as ManagedObject;
+                if (childOfNewPanel != null)
+                {
+                    var childOfNewPanelText = childOfNewPanel.As<via.gui.Text>();
+                    if (childOfNewPanelText != null)
+                    {
+                        childOfNewPanelText.Message = "<INPT id=\"UIRemove\" type=\"d\">";
+                    }
+                }
+
+                if (newText == null)
+                {
+                    API.LogWarning("Failed to duplicate child for injection.");
+                }
+
+                // textChild.remove();
+
+
+                if (newPanel == null)
+                {
+                    API.LogWarning("Failed to create new via.gui.Panel.");
+                    return PreHookResult.Continue;
+                }
+
+                // CompareGUIProperties(textChildMo, newChildMo);
+                var res1 = selectItem.addChild(newText);
+                API.LogInfo($"  -> Added new child 1: {res1}");
+
+                var res2 = scrollListChild.addChild(newPanel);
+                API.LogInfo($"  -> Added new child 2: {res2}");
+
+
+
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Error inspecting UIPartsSpin: {ex.Message}");
+        }
+
+        return PreHookResult.Continue;
     }
 }

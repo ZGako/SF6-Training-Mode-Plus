@@ -3,7 +3,7 @@ using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 namespace SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
 
-public class InputGuideDispatcherRequest(InputGuideDispatcher.InputGuideDelegate action) : IUIDispatcherRequest
+public class InputGuideDispatcherRequest(InputGuideDispatcher.InputGuideDelegate action) : SingleUseModificationRequest, IUIDispatcherRequest
 {
     private readonly InputGuideDispatcher.InputGuideDelegate _action = action;
 
@@ -23,5 +23,10 @@ public class InputGuideDispatcherRequest(InputGuideDispatcher.InputGuideDelegate
             throw new InvalidOperationException("Cannot clear dispatcher because it was never added.");
         }
         InputGuideDispatcher.UnregisterCustomInputGuideFunction(_functionName);
+    }
+
+    public override IUIModificationRequest Clone()
+    {
+        return new InputGuideDispatcherRequest(_action);
     }
 }

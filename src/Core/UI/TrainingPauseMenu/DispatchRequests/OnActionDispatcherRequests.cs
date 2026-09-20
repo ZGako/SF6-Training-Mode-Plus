@@ -2,7 +2,7 @@ using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
 
 namespace SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
 
-public class FunctionDispatcherRequest(TrainingFunctionDispatcher.FunctionDelegate functionDelegate) : IUIDispatcherRequest
+public class FunctionDispatcherRequest(TrainingFunctionDispatcher.FunctionDelegate functionDelegate) : SingleUseModificationRequest, IUIDispatcherRequest
 {
     private readonly TrainingFunctionDispatcher.FunctionDelegate _functionDelegate = functionDelegate;
 
@@ -23,9 +23,14 @@ public class FunctionDispatcherRequest(TrainingFunctionDispatcher.FunctionDelega
         }
         TrainingFunctionDispatcher.UnregisterCustomFunction(_functionName);
     }
+
+    public override FunctionDispatcherRequest Clone()
+    {
+        return new FunctionDispatcherRequest(_functionDelegate);
+    }
 }
 
-public class OptionSelectDispatcherRequest(TrainingFunctionDispatcher.FunctionDelegate functionDelegate) : IUIDispatcherRequest
+public class OptionSelectDispatcherRequest(TrainingFunctionDispatcher.FunctionDelegate functionDelegate) : SingleUseModificationRequest, IUIDispatcherRequest
 {
     private readonly TrainingFunctionDispatcher.FunctionDelegate _functionDelegate = functionDelegate;
 
@@ -45,5 +50,10 @@ public class OptionSelectDispatcherRequest(TrainingFunctionDispatcher.FunctionDe
             throw new InvalidOperationException("Cannot clear dispatcher because it was never added.");
         }
         TrainingFunctionDispatcher.UnregisterCustomOptionSelectFunction(_functionName);
+    }
+
+    public override OptionSelectDispatcherRequest Clone()
+    {
+        return new OptionSelectDispatcherRequest(_functionDelegate);
     }
 }
