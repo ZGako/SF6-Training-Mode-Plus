@@ -12,7 +12,7 @@
 *.exe
 *.pdb
 
-libs/
+libs/**
 
 .editorconfig
 
