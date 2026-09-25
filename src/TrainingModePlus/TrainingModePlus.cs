@@ -46,6 +46,10 @@ public static class TrainingModePlus
             onReady: () => { }
         );
 
+        GameSingletonRegistry.RegisterUIPrefabManager(
+            onReady: () => { TestingPrefab.Instance.Init(); }
+        );
+
         // Register modules
         Modules.Add(TestingRefactor.Instance);
         Modules.Add(GameSpeedPlus.Instance);

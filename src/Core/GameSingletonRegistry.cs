@@ -12,6 +12,7 @@ public static class GameSingletonRegistry
     {
         TrainingManager,
         UIAgentManager,
+        UIPrefabManager,
         // Add others here later
     }
 
@@ -19,6 +20,8 @@ public static class GameSingletonRegistry
     public static app.training.TrainingManager? TrainingManager { get; private set; }
 
     public static app.UIAgentManager? UIAgentManager { get; private set; }
+
+    public static app.UIPrefabManager? UIPrefabManager { get; private set; }
 
     private static readonly Dictionary<GameSingletonTypes, bool> SingletonReadyStates = [];
     private static readonly Dictionary<GameSingletonTypes, Tuple<Func<bool>, Action, Action?>> RegisteredSingletons = [];
@@ -107,6 +110,21 @@ public static class GameSingletonRegistry
         }
     }
 
+    public static void RegisterUIPrefabManager(Action onReady, Action? onRelease = null)
+    {
+        lock (RegistryLock)
+        {
+            RegisteredSingletons[GameSingletonTypes.UIPrefabManager] = new Tuple<Func<bool>, Action, Action?>(() =>
+            {
+                var uiPrefabManager = API.GetManagedSingletonT<app.UIPrefabManager>();
+                if (uiPrefabManager == null) return false;
+
+                UIPrefabManager = uiPrefabManager;
+                return true;
+            }, onReady, onRelease);
+        }
+    }
+
     /// <summary>
     /// Call this from your [PluginExitPoint] to prevent memory leaks during hot-reloads.
     /// </summary>
@@ -116,6 +134,8 @@ public static class GameSingletonRegistry
         {
             SingletonReadyStates.Clear();
             RegisteredSingletons.Clear();
+            UIAgentManager = null;
+            UIPrefabManager = null;
             TrainingManager = null;
         }
     }

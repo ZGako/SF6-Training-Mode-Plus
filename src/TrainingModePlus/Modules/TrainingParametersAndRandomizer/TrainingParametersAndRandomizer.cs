@@ -2,7 +2,7 @@
 
 using SF6_TMP.Core;
 
-namespace SF6_TMP.TrainingModePlus.Modules;
+namespace SF6_TMP.TrainingModePlus.Modules.TrainingParametersAndRandomizer;
 
 public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 {
