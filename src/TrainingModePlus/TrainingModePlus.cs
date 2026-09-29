@@ -43,11 +43,11 @@ public static class TrainingModePlus
         );
 
         GameSingletonRegistry.RegisterUIAgentManager(
-            onReady: () => { }
+            onReady: () => { TestingPrefab.Instance.Init(); }
         );
 
         GameSingletonRegistry.RegisterUIPrefabManager(
-            onReady: () => { TestingPrefab.Instance.Init(); }
+            onReady: () => { }
         );
 
         // Register modules
@@ -61,6 +61,11 @@ public static class TrainingModePlus
     {
         // Clean up static states
         CleanUpTrainingState();
+
+        // unload the input history thing
+        TestingPrefab.Instance.Unload();
+
+        // Clear the singleton registry and module list
         GameSingletonRegistry.Clear();
         Modules.Clear();
 
