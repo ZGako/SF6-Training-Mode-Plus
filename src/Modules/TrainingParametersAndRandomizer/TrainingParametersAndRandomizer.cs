@@ -1,8 +1,8 @@
 
 
-using SF6_TMP.Core;
+using SF6_Plugin_Core;
 
-namespace SF6_TMP.TrainingModePlus.Modules.TrainingParametersAndRandomizer;
+namespace SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
 public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 {

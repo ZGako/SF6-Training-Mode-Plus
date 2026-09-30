@@ -1,12 +1,12 @@
 
-using SF6_TMP.Core;
-using SF6_TMP.Core.UI;
-using SF6_TMP.Core.UI.TrainingPauseMenu;
-using SF6_TMP.Core.UI.TrainingPauseMenu.CustomElements;
-using SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
-using SF6_TMP.Core.UI.TrainingPauseMenu.ModificationRequests;
+using SF6_Plugin_Core;
+using SF6_Plugin_Core.UI;
+using SF6_Plugin_Core.UI.TrainingPauseMenu;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.DispatchRequests;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.ModificationRequests;
 
-namespace SF6_TMP.TrainingModePlus.Modules;
+namespace SF6_TMP.Modules;
 
 public class TestingRefactor : ITrainingModePlusModule
 {
@@ -103,7 +103,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager address: {(uiAgent as IObject).GetAddress()} and {(uiAgent as IObject).GetAddress():X}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager address: {(uiAgent as IObject)?.GetAddress()} and {(uiAgent as IObject)?.GetAddress():X}");
 
             var partsList = uiAgent._List;
             if (partsList == null)
@@ -112,7 +112,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List has address: {(partsList as IObject).GetAddress()}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List has address: {(partsList as IObject)?.GetAddress()}");
 
             var partItem4 = partsList[4];
             if (partItem4 == null)
@@ -121,7 +121,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4] has address: {(partItem4 as IObject).GetAddress()} and {(partItem4 as IObject).GetAddress():X}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4] has address: {(partItem4 as IObject)?.GetAddress()} and {(partItem4 as IObject)?.GetAddress():X}");
 
             // get partItem4 as a app.UIPartsGroupScroll
             // then cast it to app.UIPartsGroup
@@ -146,7 +146,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 API.LogWarning("UIAgentManager._Entries[64].Agent._PartsManager._List[4]._Children[2] is null.");
                 return;
             }
-            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4]._Children[2] has address: {(childItem2 as IObject).GetAddress()} and {(childItem2 as IObject).GetAddress():X}");
+            API.LogInfo($"UIAgentManager._Entries[64].Agent._PartsManager._List[4]._Children[2] has address: {(childItem2 as IObject)?.GetAddress()} and {(childItem2 as IObject)?.GetAddress():X}");
             // from that, we have _FocusIndex
             var focusIndex = childItem2._FocusIndex;
             // then we get _Children[_FocusIndex] as app.UIPartsSpin (only in this case)  
@@ -164,7 +164,7 @@ public class TestingRefactor : ITrainingModePlusModule
                 return;
             }
 
-            API.LogInfo($"Final address up until now: {(selectItem as IObject).GetAddress()} and {(selectItem as IObject).GetAddress():X}");
+            API.LogInfo($"Final address up until now: {(selectItem as IObject)?.GetAddress()} and {(selectItem as IObject)?.GetAddress():X}");
 
             // from that we can try to start the walks
             // 1. Invoke the native method
@@ -297,7 +297,7 @@ public class TestingRefactor : ITrainingModePlusModule
             if (selectItem == null) return PreHookResult.Continue;
 
             // NEW: Check the name of the via.gui.Control to ensure it's the exact one we want
-            var selectItemName = selectItemMo.Call("get_Name") as string;
+            var selectItemName = selectItemMo!.Call("get_Name") as string;
             if (selectItemName != "p_Spin_1_h")
             {
                 // This is a UIPartsSpin, but not the p_Spin_1_h one. Skip it.

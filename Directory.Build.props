@@ -1,0 +1,5 @@
+<Project>
+    <PropertyGroup>
+        <SF6Dir>C:\Program Files (x86)\Steam\steamapps\common\Street Fighter 6</SF6Dir>
+    </PropertyGroup>
+</Project>

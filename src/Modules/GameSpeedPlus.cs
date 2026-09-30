@@ -1,13 +1,13 @@
 // Core usings
-using SF6_TMP.Core;
-using SF6_TMP.Core.UI;
-using SF6_TMP.Core.UI.TrainingPauseMenu;
-using SF6_TMP.Core.UI.TrainingPauseMenu.CustomElements;
-using SF6_TMP.Core.UI.TrainingPauseMenu.Dispatchers;
-using SF6_TMP.Core.UI.TrainingPauseMenu.DispatchRequests;
-using SF6_TMP.Core.UI.TrainingPauseMenu.ModificationRequests;
+using SF6_Plugin_Core;
+using SF6_Plugin_Core.UI;
+using SF6_Plugin_Core.UI.TrainingPauseMenu;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Dispatchers;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.DispatchRequests;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.ModificationRequests;
 
-namespace SF6_TMP.TrainingModePlus.Modules;
+namespace SF6_TMP.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
