@@ -35,20 +35,23 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         try
         {
-            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, reorderRequest);
-            _modificationRequests.Add(reorderRequest);
+            PauseMenuManager.ModifyUI(() =>
+            {
+                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, reorderRequest);
+                _modificationRequests.Add(reorderRequest);
 
-            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, appendRequest);
-            _modificationRequests.Add(appendRequest);
+                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, appendRequest);
+                _modificationRequests.Add(appendRequest);
 
-            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, inputGuideRequest);
-            _modificationRequests.Add(inputGuideRequest);
+                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, inputGuideRequest);
+                _modificationRequests.Add(inputGuideRequest);
 
-            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, spinBoxRequest);
-            _modificationRequests.Add(spinBoxRequest);
+                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, spinBoxRequest);
+                _modificationRequests.Add(spinBoxRequest);
 
-            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, optionSelectRequest);
-            _modificationRequests.Add(optionSelectRequest);
+                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, optionSelectRequest);
+                _modificationRequests.Add(optionSelectRequest);
+            });
         }
         catch (Exception ex)
         {
@@ -60,10 +63,13 @@ public class GameSpeedPlus : ITrainingModePlusModule
     public void Unload()
     {
         API.LogInfo("Unloading GameSpeedPlus module...");
-        foreach (var request in _modificationRequests)
+        PauseMenuManager.ModifyUI(() =>
         {
-            PauseMenuManager.UnregisterModification(request);
-        }
+            foreach (var request in _modificationRequests)
+            {
+                PauseMenuManager.UnregisterModification(request);
+            }
+        });
     }
 
     /// <summary>

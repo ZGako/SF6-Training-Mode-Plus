@@ -44,8 +44,11 @@ public class TestingRefactor : ITrainingModePlusModule
 
         try
         {
-            PauseMenuManager.RegisterModification([1], appendRequest);
-            PauseMenuManager.RegisterModification([0], toggleAppendRequest);
+            PauseMenuManager.ModifyUI(() =>
+            {
+                PauseMenuManager.RegisterModification([1], appendRequest);
+                PauseMenuManager.RegisterModification([0], toggleAppendRequest);
+            });
         }
         catch (Exception ex)
         {
@@ -61,17 +64,19 @@ public class TestingRefactor : ITrainingModePlusModule
     {
         _buttonVisible = !_buttonVisible;
 
-        if (_buttonVisible)
+        PauseMenuManager.ModifyUI(() =>
         {
-            // Show the button
-            PauseMenuManager.RegisterModification([1], _randomizerButtonAppendRequest!);
-        }
-        else
-        {
-            PauseMenuManager.UnregisterModification(_randomizerButtonAppendRequest!);
-        }
+            if (_buttonVisible)
+            {
+                // Show the button
+                PauseMenuManager.RegisterModification([1], _randomizerButtonAppendRequest!);
+            }
+            else
+            {
+                PauseMenuManager.UnregisterModification(_randomizerButtonAppendRequest!);
+            }
 
-        PauseMenuManager.RebuildUI();
+        });
     }
 
     private static void TestForItem()
@@ -266,13 +271,15 @@ public class TestingRefactor : ITrainingModePlusModule
 
     public void Unload()
     {
-
         try
         {
-            foreach (var request in _modificationRequests)
+            PauseMenuManager.ModifyUI(() =>
             {
-                PauseMenuManager.UnregisterModification(request);
-            }
+                foreach (var request in _modificationRequests)
+                {
+                    PauseMenuManager.UnregisterModification(request);
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -280,7 +287,7 @@ public class TestingRefactor : ITrainingModePlusModule
         }
     }
 
-    [MethodHook(typeof(app.UIPartsItem), nameof(app.UIPartsItem.SetupLayout), MethodHookType.Pre)]
+    // [MethodHook(typeof(app.UIPartsItem), nameof(app.UIPartsItem.SetupLayout), MethodHookType.Pre)]
     private static PreHookResult OnSetupLayoutPre(Span<ulong> args)
     {
         // return PreHookResult.Continue;

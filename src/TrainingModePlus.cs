@@ -62,8 +62,6 @@ public static class TrainingModePlus
                 {
                     module.Init();
                 }
-
-                PauseMenuManager.RebuildUI();
             },
             onRelease: () =>
             {
@@ -113,8 +111,6 @@ public static class TrainingModePlus
             module.Unload();
         }
 
-        PauseMenuManager.RebuildUI();
-
         UIHelpers.ClearTrainingPauseMenuDispatchers();
     }
 
@@ -134,7 +130,9 @@ public static class TrainingModePlus
                 }
             }
         }
+#pragma warning disable CS8603 // Possible null reference return.
         return null; // Let default resolution fail if not found
+#pragma warning restore CS8603 // Possible null reference return.
     }
 
 }
