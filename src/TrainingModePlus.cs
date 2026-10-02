@@ -30,7 +30,7 @@ public static class TrainingModePlus
     private static readonly List<ITrainingModePlusModule> Modules = [];
 
     [PluginEntryPoint]
-    private static void PluginEntryPoint()
+    public static void PluginEntryPoint()
     {
         var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
         if (currentALC == null)
@@ -71,7 +71,7 @@ public static class TrainingModePlus
         );
 
         GameSingletonRegistry.RegisterUIAgentManager(
-            onReady: () => { TestingPrefab.Instance.Init(); }
+            onReady: () => { /* TestingPrefab.Instance.Init(); */ }
         );
 
         GameSingletonRegistry.RegisterUIPrefabManager(
@@ -85,19 +85,30 @@ public static class TrainingModePlus
     }
 
     [PluginExitPoint]
-    private static void PluginExitPoint()
+    public static void PluginExitPoint()
     {
-        // Clean up static states
-        CleanUpTrainingState();
+        try
+        {
+            // Clean up static states
+            CleanUpTrainingState();
 
-        // unload the input history thing
-        TestingPrefab.Instance.Unload();
+            // Clear the singleton registry and module list
+            GameSingletonRegistry.Clear();
+            Modules.Clear();
 
-        // Clear the singleton registry and module list
-        GameSingletonRegistry.Clear();
-        Modules.Clear();
+            API.LogInfo("Unloading TrainingModePlus C# plugin...");
 
-        API.LogInfo("Unloading TrainingModePlus C# plugin...");
+            var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
+            if (currentALC != null)
+            {
+                currentALC.Resolving -= OnResolvingCore;
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception during plugin exit: {ex}");
+        }
+
     }
 
     /// <summary>
