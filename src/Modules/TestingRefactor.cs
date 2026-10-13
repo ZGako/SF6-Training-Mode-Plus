@@ -1,12 +1,14 @@
 
 using SF6_Plugin_Core;
+using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI;
-using SF6_Plugin_Core.UI.TrainingPauseMenu;
+using SF6_Plugin_Core.UI.Localization;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.DispatchRequests;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.ModificationRequests;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
 
 namespace SF6_TMP.Modules;
+// FIXME: remove this eventually
 
 public class TestingRefactor : ITrainingModePlusModule
 {
@@ -18,29 +20,29 @@ public class TestingRefactor : ITrainingModePlusModule
 
     private bool _buttonVisible = true;
 
-    private AppendElements? _randomizerButtonAppendRequest;
+    private AppendElementsRequest? _randomizerButtonAppendRequest;
 
     public void Init()
     {
-        FunctionDispatcherRequest dispatcherRequest = new((_, _, _) => { });
+        FunctionHookRequest dispatcherRequest = new((_, _, _) => { });
         UICustomElementNode newElement = new("TestRowButton",
                                             new RowButtonInitializer(new CustomMessage("Restart Battle and Randomize"),
                                                                      new CustomMessage("Apply current settings, randomizing the appropriate settings, and restart the battle.")));
 
         newElement.AddDispatcher(dispatcherRequest);
 
-        AppendElements appendRequest = new([(1, newElement)]);
+        AppendElementsRequest appendRequest = new([(1, newElement)]);
         _randomizerButtonAppendRequest = appendRequest;
 
         // create button in another tab, that toggles the first buttons existance
-        FunctionDispatcherRequest toggleDispatcherReq = new((_, _, _) => ToggleButtonVisibility());
+        FunctionHookRequest toggleDispatcherReq = new((_, _, _) => ToggleButtonVisibility());
         UICustomElementNode newElement2 = new("TOGGLE_OTHER_BUTTON",
                                             new RowButtonInitializer(new CustomMessage("Toggle Other Button"),
                                                                      new CustomMessage("Toggles the visibility of the other button.")));
 
         newElement2.AddDispatcher(toggleDispatcherReq);
 
-        AppendElements toggleAppendRequest = new([(-1, newElement2)]);
+        AppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
 
         try
         {
@@ -87,13 +89,13 @@ public class TestingRefactor : ITrainingModePlusModule
 
         try
         {
-            var uiAgentManager = GameSingletonRegistry.UIAgentManager;
+            var uiAgentManager = GameSingletonManager.UIAgentManager;
             if (uiAgentManager == null)
             {
                 API.LogWarning("UIAgentManager is not initialized yet.");
                 return;
             }
-            var thing = GameSingletonRegistry.UIAgentManager!._Entries;
+            var thing = GameSingletonManager.UIAgentManager!._Entries;
 
             if (thing[64] == null)
             {

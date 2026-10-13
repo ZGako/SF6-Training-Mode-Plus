@@ -8,42 +8,27 @@ global using REFrameworkNET.Attributes;
 global using REFrameworkNET.Collections;
 global using REFrameworkNET.Callbacks;
 
-
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 // Core usings
 using SF6_Plugin_Core;
-using SF6_Plugin_Core.UI;
 using SF6_Plugin_Core.UI.TrainingPauseMenu;
 
 // TrainingModePlus usings
 using SF6_TMP.Modules;
 using System.Reflection;
+using SF6_Plugin_Core.Services;
+using SF6_Plugin_Core.UI.Helpers;
 
 namespace SF6_TMP;
 
-/// <summary>
-/// The main entry point for the TrainingModePlus plugin. This class is responsible for initializing the plugin, managing its modules, and handling the lifecycle of the TrainingManager.
-/// </summary>
+// FIXME: refactor
+
+
 public static class TrainingModePlus
 {
     private static readonly List<ITrainingModePlusModule> Modules = [];
 
-    [PluginEntryPoint]
-    public static void PluginEntryPoint()
-    {
-        var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
-        if (currentALC == null)
-        {
-            API.LogError("Failed to get the current AssemblyLoadContext. Plugin initialization aborted.");
-            return;
-        }
-
-        currentALC.Resolving += OnResolvingCore;
-
-
-        InitializePlugin();
-    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void InitializePlugin()
@@ -53,7 +38,7 @@ public static class TrainingModePlus
         API.LogWarning("Loading TrainingModePlus C# plugin...");
 
         // Register the TrainingManager singleton with the GameSingletonRegistry
-        GameSingletonRegistry.RegisterTrainingManager(
+        GameSingletonManager.RegisterTrainingManager(
             onReady: () =>
             {
                 API.LogInfo("TrainingManager initialized!");
@@ -70,51 +55,25 @@ public static class TrainingModePlus
             }
         );
 
-        GameSingletonRegistry.RegisterUIAgentManager(
-            onReady: () => { /* TestingPrefab.Instance.Init(); */ }
-        );
-
-        GameSingletonRegistry.RegisterUIPrefabManager(
-            onReady: () => { }
-        );
-
         // Register modules
         Modules.Add(TestingRefactor.Instance);
         Modules.Add(GameSpeedPlus.Instance);
         // Modules.Add(TrainingParametersAndRandomizer.Instance);
     }
 
-    [PluginExitPoint]
-    public static void PluginExitPoint()
+    public static void UnloadPlugin()
     {
+        API.LogInfo("Unloading TrainingModePlus C# plugin...");
         try
         {
-            // Clean up static states
             CleanUpTrainingState();
-
-            // Clear the singleton registry and module list
-            GameSingletonRegistry.Clear();
-            Modules.Clear();
-
-            API.LogInfo("Unloading TrainingModePlus C# plugin...");
-
-            var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
-            if (currentALC != null)
-            {
-                currentALC.Resolving -= OnResolvingCore;
-            }
         }
         catch (Exception ex)
         {
-            API.LogError($"Exception during plugin exit: {ex}");
+            API.LogError($"Exception during UnloadPlugin: {ex}");
         }
-
     }
 
-    /// <summary>
-    /// Cleans up the training state by unloading all registered modules, resetting the TrainingManager and its initialization state, and clearing any UI dispatchers related to the training pause menu. 
-    /// This method is called when the plugin is unloaded or when the TrainingManager is released.
-    /// </summary>
     private static void CleanUpTrainingState()
     {
         foreach (var module in Modules)
@@ -123,6 +82,50 @@ public static class TrainingModePlus
         }
 
         UIHelpers.ClearTrainingPauseMenuDispatchers();
+    }
+
+
+    ///
+    ///  Default plugin entry and exit points
+    /// 
+
+    [PluginEntryPoint]
+    public static void PluginEntryPoint()
+    {
+        var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
+        if (currentALC == null)
+        {
+            API.LogError("Failed to get the current AssemblyLoadContext. Plugin initialization aborted.");
+            return;
+        }
+
+        currentALC.Resolving += OnResolvingCore;
+
+        InitializePlugin();
+    }
+
+    [PluginExitPoint]
+    public static void PluginExitPoint()
+    {
+        try
+        {
+            UnloadPlugin();
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception during PluginExitPoint: {ex}");
+        }
+
+        try
+        {
+            var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
+
+            currentALC?.Resolving -= OnResolvingCore;
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception during AssemblyLoadContext cleanup: {ex}");
+        }
     }
 
     private static Assembly OnResolvingCore(AssemblyLoadContext context, AssemblyName assemblyName)
@@ -136,11 +139,12 @@ public static class TrainingModePlus
                 {
                     if (loadedAssembly.GetName().Name == "00_SF6PluginCore")
                     {
-                        return loadedAssembly; // We found it in memory! Hand it back to the runtime.
+                        return loadedAssembly;
                     }
                 }
             }
         }
+        API.LogError($"Failed to resolve assembly: {assemblyName.Name}. Ensure that the SF6_Plugin_Core is loaded and accessible.");
 #pragma warning disable CS8603 // Possible null reference return.
         return null; // Let default resolution fail if not found
 #pragma warning restore CS8603 // Possible null reference return.

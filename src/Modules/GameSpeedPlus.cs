@@ -1,13 +1,15 @@
 // Core usings
 using SF6_Plugin_Core;
+using SF6_Plugin_Core.Memory;
+using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI;
-using SF6_Plugin_Core.UI.TrainingPauseMenu;
+using SF6_Plugin_Core.UI.Localization;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.Dispatchers;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.DispatchRequests;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.ModificationRequests;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
 
 namespace SF6_TMP.Modules;
+// FIXME: refactor
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
@@ -24,14 +26,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
         API.LogInfo("Initializing GameSpeedPlus module...");
 
         // reorder to: Pause, 50%, Standard
-        PauseMenuManager.ReorderRequest reorderRequest = new([2, 1, 0]);
+        ReorderRequest reorderRequest = new([2, 1, 0]);
 
         List<(int, UICustomElementNode)> newElements = CreateGameSpeedElements();
-        AppendElements appendRequest = new(newElements);
+        AppendElementsRequest appendRequest = new(newElements);
 
-        InputGuideDispatcherRequest inputGuideRequest = new(SetCustomGuide);
-        SpinBoxDispatcherRequest spinBoxRequest = new(GetCurrentGameSpeedFunctionName);
-        OptionSelectDispatcherRequest optionSelectRequest = new(ResetToDefaultGameSpeed);
+        InputGuideHookRequest inputGuideRequest = new(SetCustomGuide);
+        SpinBoxHookRequest spinBoxRequest = new(GetCurrentGameSpeedFunctionName);
+        OptionSelectHookRequest optionSelectRequest = new(ResetToDefaultGameSpeed);
 
         try
         {
@@ -101,7 +103,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
             var newElement = new UICustomElementNode(functionName, initializer);
 
             // Register the dispatcher for this game speed option
-            FunctionDispatcherRequest dispatcherRequest = new((_, _, _) => ChangeGameSpeed(speed));
+            FunctionHookRequest dispatcherRequest = new((_, _, _) => ChangeGameSpeed(speed));
             newElement.AddDispatcher(dispatcherRequest);
 
             // Add the new element to the list with its index
@@ -117,14 +119,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
     /// <param name="speedIndex"></param>
     private static void ChangeGameSpeed(app.training.GameSpeed speedIndex)
     {
-        if (GameSingletonRegistry.TrainingManager == null)
+        if (GameSingletonManager.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
             return;
         }
 
         // get nested members of the singleton for easier access
-        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
+        var tfFuncs = GameSingletonManager.TrainingManager._tfFuncs as IObject;
         var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
 
         if (entriesArray != null && entriesArray.Length > 10)
@@ -158,7 +160,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         customGuideData.Type = app.InputGuideDataType.DigitalConfig;
         customGuideData.DigitalConfigId = app.InputAssign.Digital.ConfigId.UI_BACK;
         var newMessage = new CustomMessage("Restore to Standard");
-        MessageManager.SetGuid(customGuideDataMo, "<MessageId>k__BackingField", newMessage.Id);
+        customGuideDataMo.SetGuidField("<MessageId>k__BackingField", newMessage.Id);
 
         outInputGuideDataList.Add(customGuideData);
     }
@@ -167,14 +169,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
     {
         int defaultGameSpeed = (int)app.training.TrainingFuncType.ENV_GAME_SPEED_0;
 
-        if (GameSingletonRegistry.TrainingManager == null)
+        if (GameSingletonManager.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot retrieve current game speed.");
             return defaultGameSpeed;
         }
 
         // get nested members of the singleton for easier access
-        var tfFuncs = GameSingletonRegistry.TrainingManager._tfFuncs as IObject;
+        var tfFuncs = GameSingletonManager.TrainingManager._tfFuncs as IObject;
         var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
 
         if (entriesArray == null || entriesArray.Length <= 10)
@@ -198,9 +200,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
             return (int)app.training.TrainingFuncType.ENV_GAME_SPEED_2;
         }
 
-        if (GameSingletonRegistry.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
+        if (GameSingletonManager.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
         {
-            var currentSpeed = GameSingletonRegistry.TrainingManager.TData.OtherSetting.OS_Game_Speed;
+            var currentSpeed = GameSingletonManager.TrainingManager.TData.OtherSetting.OS_Game_Speed;
 
             string resultingFunctionName;
 
