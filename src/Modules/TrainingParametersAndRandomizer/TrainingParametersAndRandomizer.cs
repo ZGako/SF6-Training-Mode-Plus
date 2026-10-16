@@ -4,7 +4,7 @@ using SF6_Plugin_Core;
 
 namespace SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
-// FIXME: refactor
+// TODO: Implement
 
 public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 {

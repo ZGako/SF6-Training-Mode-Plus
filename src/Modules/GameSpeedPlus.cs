@@ -9,7 +9,6 @@ using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
 
 namespace SF6_TMP.Modules;
-// FIXME: refactor
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
@@ -20,6 +19,19 @@ public class GameSpeedPlus : ITrainingModePlusModule
     private readonly List<IUIModificationRequest> _modificationRequests = [];
 
     private static readonly List<int> PathToGamespeedSpinbox = [1, 3];
+
+    private static readonly Guid ENV_GAMESPEED_60 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_70 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_80 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_90 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_110 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_120 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_130 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_140 = Guid.NewGuid();
+    private static readonly Guid ENV_GAMESPEED_150 = Guid.NewGuid();
+
+    private static ManagedObject? _customGuideDataMo;
+    private static CustomMessage? _newMessage;
 
     public void Init()
     {
@@ -60,18 +72,35 @@ public class GameSpeedPlus : ITrainingModePlusModule
             API.LogError($"Error registering modification: {ex.Message}");
         }
 
+        // input guide initialization to cache the elements instead of recreating them each time the input guide is queried
+        _newMessage = new("Restore to Standard");
+
+        _customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
+        _customGuideDataMo.Globalize();
+        _customGuideDataMo.SetGuidField("<MessageId>k__BackingField", _newMessage.Id);
+
     }
 
     public void Unload()
     {
         API.LogInfo("Unloading GameSpeedPlus module...");
-        PauseMenuManager.ModifyUI(() =>
+        if (_modificationRequests.Count > 0)
         {
-            foreach (var request in _modificationRequests)
+            PauseMenuManager.ModifyUI(() =>
             {
-                PauseMenuManager.UnregisterModification(request);
-            }
-        });
+                foreach (var request in _modificationRequests)
+                {
+                    PauseMenuManager.UnregisterModification(request);
+                }
+            });
+
+            _modificationRequests.Clear();
+        }
+        _customGuideDataMo?.ReleaseIfGlobalized();
+        _customGuideDataMo = null;
+
+        _newMessage?.Dispose();
+        _newMessage = null;
     }
 
     /// <summary>
@@ -83,17 +112,17 @@ public class GameSpeedPlus : ITrainingModePlusModule
         var newElements = new List<(int, UICustomElementNode)>();
 
         // Create the new game speed options
-        var speedOptionData = new (app.training.GameSpeed speed, string messageID, string functionName, int attachToIndex)[]
+        var speedOptionData = new (app.training.GameSpeed speed, string messageID, Guid functionId, int attachToIndex)[]
         {
-            (app.training.GameSpeed.SPEED_60, "60%", "ENV_GAME_SPEED_60%", 2),
-            (app.training.GameSpeed.SPEED_70, "70%", "ENV_GAME_SPEED_70%", 2),
-            (app.training.GameSpeed.SPEED_80, "80%", "ENV_GAME_SPEED_80%", 2),
-            (app.training.GameSpeed.SPEED_90, "90%", "ENV_GAME_SPEED_90%", 2),
-            (app.training.GameSpeed.SPEED_110, "110%", "ENV_GAME_SPEED_110%", 1),
-            (app.training.GameSpeed.SPEED_120, "120%", "ENV_GAME_SPEED_120%", 1),
-            (app.training.GameSpeed.SPEED_130, "130%", "ENV_GAME_SPEED_130%", 1),
-            (app.training.GameSpeed.SPEED_140, "140%", "ENV_GAME_SPEED_140%", 1),
-            (app.training.GameSpeed.SPEED_150, "150%", "ENV_GAME_SPEED_150%", 1),
+            (app.training.GameSpeed.SPEED_60, "60%", ENV_GAMESPEED_60, 2),
+            (app.training.GameSpeed.SPEED_70, "70%", ENV_GAMESPEED_70, 2),
+            (app.training.GameSpeed.SPEED_80, "80%", ENV_GAMESPEED_80, 2),
+            (app.training.GameSpeed.SPEED_90, "90%", ENV_GAMESPEED_90, 2),
+            (app.training.GameSpeed.SPEED_110, "110%", ENV_GAMESPEED_110, 1),
+            (app.training.GameSpeed.SPEED_120, "120%", ENV_GAMESPEED_120, 1),
+            (app.training.GameSpeed.SPEED_130, "130%", ENV_GAMESPEED_130, 1),
+            (app.training.GameSpeed.SPEED_140, "140%", ENV_GAMESPEED_140, 1),
+            (app.training.GameSpeed.SPEED_150, "150%", ENV_GAMESPEED_150, 1),
         };
 
         foreach (var (speed, messageID, functionName, attachToIndex) in speedOptionData)
@@ -102,9 +131,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
             var initializer = new SpinnerOptionTextInitializer(message);
             var newElement = new UICustomElementNode(functionName, initializer);
 
-            // Register the dispatcher for this game speed option
-            FunctionHookRequest dispatcherRequest = new((_, _, _) => ChangeGameSpeed(speed));
-            newElement.AddDispatcher(dispatcherRequest);
+            // Register the hook for this game speed option
+            FunctionHookRequest hookRequest = new((_, _, _) => ChangeGameSpeed(speed));
+            newElement.AddHook(hookRequest);
 
             // Add the new element to the list with its index
             newElements.Add((attachToIndex, newElement));
@@ -117,12 +146,12 @@ public class GameSpeedPlus : ITrainingModePlusModule
     /// Captured function to change the game speed. This function accesses the TrainingManager singleton and modifies the game speed settings based on the provided speed index.
     /// </summary>
     /// <param name="speedIndex"></param>
-    private static void ChangeGameSpeed(app.training.GameSpeed speedIndex)
+    private static bool ChangeGameSpeed(app.training.GameSpeed speedIndex)
     {
         if (GameSingletonManager.TrainingManager == null)
         {
             API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
-            return;
+            return false;
         }
 
         // get nested members of the singleton for easier access
@@ -143,31 +172,32 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
                 // Apply your custom speed here
                 funcListObj.Call("SetGameSpeed(app.training.GameSpeed)", (int)speedIndex);
-                return;
+                return false;
             }
         }
 
         API.LogError("Failed to change game speed. Could not access the necessary fields.");
+        return false;
     }
 
-    // delegate for the custom guide dispatcher
+    // delegate for the custom guide hook
     private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
     {
-        var customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
-        customGuideDataMo.Globalize();
-
-        var customGuideData = customGuideDataMo.As<app.InputGuideData>();
+        if (_customGuideDataMo == null)
+        {
+            API.LogError("Custom guide data ManagedObject is null. Cannot set custom guide.");
+            return;
+        }
+        var customGuideData = _customGuideDataMo.As<app.InputGuideData>();
         customGuideData.Type = app.InputGuideDataType.DigitalConfig;
         customGuideData.DigitalConfigId = app.InputAssign.Digital.ConfigId.UI_BACK;
-        var newMessage = new CustomMessage("Restore to Standard");
-        customGuideDataMo.SetGuidField("<MessageId>k__BackingField", newMessage.Id);
 
         outInputGuideDataList.Add(customGuideData);
     }
 
-    private static int GetCurrentGameSpeedFunctionName(app.training.UIFlowTrainingMenu.Param _)
+    private static TrainingFuncOrGuid GetCurrentGameSpeedFunctionName(app.training.UIFlowTrainingMenu.Param _)
     {
-        int defaultGameSpeed = (int)app.training.TrainingFuncType.ENV_GAME_SPEED_0;
+        var defaultGameSpeed = app.training.TrainingFuncType.ENV_GAME_SPEED_0;
 
         if (GameSingletonManager.TrainingManager == null)
         {
@@ -197,67 +227,45 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         if (gameData.IsMenuPause)
         {
-            return (int)app.training.TrainingFuncType.ENV_GAME_SPEED_2;
+            return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
         }
 
         if (GameSingletonManager.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
         {
             var currentSpeed = GameSingletonManager.TrainingManager.TData.OtherSetting.OS_Game_Speed;
 
-            string resultingFunctionName;
-
             switch (currentSpeed)
             {
                 case app.training.GameSpeed.SPEED_50:
-                    return (int)app.training.TrainingFuncType.ENV_GAME_SPEED_1;
+                    return app.training.TrainingFuncType.ENV_GAME_SPEED_1;
                 case app.training.GameSpeed.SPEED_60:
-                    resultingFunctionName = "ENV_GAME_SPEED_60%";
-                    break;
+                    return ENV_GAMESPEED_60;
                 case app.training.GameSpeed.SPEED_70:
-
-                    resultingFunctionName = "ENV_GAME_SPEED_70%";
-                    break;
+                    return ENV_GAMESPEED_70;
                 case app.training.GameSpeed.SPEED_80:
-                    resultingFunctionName = "ENV_GAME_SPEED_80%";
-                    break;
+                    return ENV_GAMESPEED_80;
                 case app.training.GameSpeed.SPEED_90:
-                    resultingFunctionName = "ENV_GAME_SPEED_90%";
-                    break;
+                    return ENV_GAMESPEED_90;
                 case app.training.GameSpeed.SPEED_110:
-                    resultingFunctionName = "ENV_GAME_SPEED_110%";
-                    break;
+                    return ENV_GAMESPEED_110;
                 case app.training.GameSpeed.SPEED_120:
-                    resultingFunctionName = "ENV_GAME_SPEED_120%";
-                    break;
+                    return ENV_GAMESPEED_120;
                 case app.training.GameSpeed.SPEED_130:
-                    resultingFunctionName = "ENV_GAME_SPEED_130%";
-                    break;
+                    return ENV_GAMESPEED_130;
                 case app.training.GameSpeed.SPEED_140:
-                    resultingFunctionName = "ENV_GAME_SPEED_140%";
-                    break;
+                    return ENV_GAMESPEED_140;
                 case app.training.GameSpeed.SPEED_150:
-                    resultingFunctionName = "ENV_GAME_SPEED_150%";
-                    break;
+                    return ENV_GAMESPEED_150;
                 default:
                     API.LogWarning($"Unknown game speed: {currentSpeed}. Defaulting to index 0.");
                     return defaultGameSpeed;
-            }
-
-            if (FunctionTypeRegistry.TryGetFunctionType(resultingFunctionName, out int funcType))
-            {
-                return funcType;
-            }
-            else
-            {
-                API.LogWarning($"Function name '{resultingFunctionName}' not found in FunctionTypeRegistry. Defaulting to index 0.");
-                return defaultGameSpeed;
             }
         }
 
         return defaultGameSpeed;
     }
 
-    private static void ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
+    private static bool ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
     {
         // we first want to find the index of the default game speed
         var childArray = viewData.Data.ChildData;
@@ -278,7 +286,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         if (uipart.Num == index)
         {
             // already at default, no need to change
-            return;
+            return false;
         }
 
         uipart.Num = index;
@@ -286,6 +294,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
         scrollList.SetSelectedIndex(index, false);
         uiFlowParam.UpdateSpinBox(rowIndex, true, true);
         uiFlowParam.OnUpdateSpin();
+
+        return false;
     }
 
 }

@@ -22,48 +22,52 @@ using SF6_Plugin_Core.UI.Helpers;
 
 namespace SF6_TMP;
 
-// FIXME: refactor
-
-
 public static class TrainingModePlus
 {
     private static readonly List<ITrainingModePlusModule> Modules = [];
 
-
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void InitializePlugin()
     {
-        // Logging stuff
         API.LogLevel = 0;
         API.LogWarning("Loading TrainingModePlus C# plugin...");
 
-        // Register the TrainingManager singleton with the GameSingletonRegistry
-        GameSingletonManager.RegisterTrainingManager(
-            onReady: () =>
-            {
-                API.LogInfo("TrainingManager initialized!");
+        Modules.Add(GameSpeedPlus.Instance);
+        // Modules.Add(TestingRefactor.Instance);
 
-                foreach (var module in Modules)
-                {
-                    module.Init();
-                }
-            },
-            onRelease: () =>
-            {
-                CleanUpTrainingState();
-                API.LogInfo("TrainingManager released. Mod state cleaned up.");
-            }
+        GameSingletonManager.RegisterTrainingManager(
+            onReady: OnTrainingManagerReady,
+            onRelease: OnTrainingManagerRelease
         );
 
-        // Register modules
-        Modules.Add(TestingRefactor.Instance);
-        Modules.Add(GameSpeedPlus.Instance);
-        // Modules.Add(TrainingParametersAndRandomizer.Instance);
+        CoreLifecycle.OnCoreUnloading += PluginExitPoint;
     }
 
+    private static void OnTrainingManagerReady()
+    {
+        API.LogInfo("TrainingManager initialized!");
+        foreach (var module in Modules)
+        {
+            module.Init();
+        }
+    }
+
+    private static void OnTrainingManagerRelease()
+    {
+        CleanUpTrainingState();
+        API.LogInfo("TrainingManager released. Mod state cleaned up.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void UnloadPlugin()
     {
         API.LogInfo("Unloading TrainingModePlus C# plugin...");
+
+        // Unsubscribe from Core events/singletons so Core holds zero references to this assembly
+        CoreLifecycle.OnCoreUnloading -= PluginExitPoint;
+        GameSingletonManager.UnregisterTrainingManager(OnTrainingManagerReady, OnTrainingManagerRelease);
+
+        // Clean up active module state
         try
         {
             CleanUpTrainingState();
@@ -72,18 +76,26 @@ public static class TrainingModePlus
         {
             API.LogError($"Exception during UnloadPlugin: {ex}");
         }
+        finally
+        {
+            Modules.Clear();
+        }
     }
 
     private static void CleanUpTrainingState()
     {
         foreach (var module in Modules)
         {
-            module.Unload();
+            try
+            {
+                module.Unload();
+            }
+            catch (Exception ex)
+            {
+                API.LogError($"Exception unloading module {module.GetType().Name}: {ex}");
+            }
         }
-
-        UIHelpers.ClearTrainingPauseMenuDispatchers();
     }
-
 
     ///
     ///  Default plugin entry and exit points

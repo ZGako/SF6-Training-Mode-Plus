@@ -22,25 +22,28 @@ public class TestingRefactor : ITrainingModePlusModule
 
     private AppendElementsRequest? _randomizerButtonAppendRequest;
 
+    private static readonly Guid TEST_ROW_BUTTON = Guid.NewGuid();
+    private static readonly Guid TOGGLE_OTHER_BUTTON = Guid.NewGuid();
+
     public void Init()
     {
-        FunctionHookRequest dispatcherRequest = new((_, _, _) => { });
-        UICustomElementNode newElement = new("TestRowButton",
+        FunctionHookRequest HookRequest = new((_, _, _) => { return true; });
+        UICustomElementNode newElement = new(TEST_ROW_BUTTON,
                                             new RowButtonInitializer(new CustomMessage("Restart Battle and Randomize"),
                                                                      new CustomMessage("Apply current settings, randomizing the appropriate settings, and restart the battle.")));
 
-        newElement.AddDispatcher(dispatcherRequest);
+        newElement.AddHook(HookRequest);
 
         AppendElementsRequest appendRequest = new([(1, newElement)]);
         _randomizerButtonAppendRequest = appendRequest;
 
         // create button in another tab, that toggles the first buttons existance
-        FunctionHookRequest toggleDispatcherReq = new((_, _, _) => ToggleButtonVisibility());
-        UICustomElementNode newElement2 = new("TOGGLE_OTHER_BUTTON",
+        FunctionHookRequest toggleHookReq = new((_, _, _) => ToggleButtonVisibility());
+        UICustomElementNode newElement2 = new(TOGGLE_OTHER_BUTTON,
                                             new RowButtonInitializer(new CustomMessage("Toggle Other Button"),
                                                                      new CustomMessage("Toggles the visibility of the other button.")));
 
-        newElement2.AddDispatcher(toggleDispatcherReq);
+        newElement2.AddHook(toggleHookReq);
 
         AppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
 
@@ -62,7 +65,7 @@ public class TestingRefactor : ITrainingModePlusModule
         API.LogInfo("TestingRefactor module initialized!");
     }
 
-    private void ToggleButtonVisibility()
+    private bool ToggleButtonVisibility()
     {
         _buttonVisible = !_buttonVisible;
 
@@ -79,6 +82,8 @@ public class TestingRefactor : ITrainingModePlusModule
             }
 
         });
+
+        return false;
     }
 
     private static void TestForItem()
