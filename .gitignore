@@ -17,3 +17,5 @@ libs/**
 .editorconfig
 
 .continue/
+
+.idea/

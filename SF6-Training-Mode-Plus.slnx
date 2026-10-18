@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Core/">
+    <Project Path="Core/SF6PluginCore.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/SF6TrainingModePlus.csproj" />
+  </Folder>
+</Solution>
