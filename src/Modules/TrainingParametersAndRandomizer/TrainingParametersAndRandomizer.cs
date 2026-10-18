@@ -1,16 +1,14 @@
-
-
-using SF6_Plugin_Core;
-
 namespace SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
 // TODO: Implement
 
 public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 {
-    public static TrainingParametersAndRandomizer Instance { get; private set; } = new TrainingParametersAndRandomizer();
+    private TrainingParametersAndRandomizer()
+    {
+    }
 
-    private TrainingParametersAndRandomizer() { }
+    public static TrainingParametersAndRandomizer Instance { get; private set; } = new();
 
     public void Init()
     {

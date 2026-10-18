@@ -2,23 +2,20 @@
 global using System.Collections.Generic;
 global using System.Runtime.InteropServices;
 global using System.Linq;
-
 global using REFrameworkNET;
 global using REFrameworkNET.Attributes;
 global using REFrameworkNET.Collections;
 global using REFrameworkNET.Callbacks;
-
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
-// Core usings
 using SF6_Plugin_Core;
-using SF6_Plugin_Core.UI.TrainingPauseMenu;
+using SF6_Plugin_Core.Services;
+using SF6_TMP.Modules;
+
+// Core usings
 
 // TrainingModePlus usings
-using SF6_TMP.Modules;
-using System.Reflection;
-using SF6_Plugin_Core.Services;
-using SF6_Plugin_Core.UI.Helpers;
 
 namespace SF6_TMP;
 
@@ -36,8 +33,8 @@ public static class TrainingModePlus
         // Modules.Add(TestingRefactor.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
-            onReady: OnTrainingManagerReady,
-            onRelease: OnTrainingManagerRelease
+            OnTrainingManagerReady,
+            OnTrainingManagerRelease
         );
 
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
@@ -46,10 +43,7 @@ public static class TrainingModePlus
     private static void OnTrainingManagerReady()
     {
         API.LogInfo("TrainingManager initialized!");
-        foreach (var module in Modules)
-        {
-            module.Init();
-        }
+        foreach (var module in Modules) module.Init();
     }
 
     private static void OnTrainingManagerRelease()
@@ -85,7 +79,6 @@ public static class TrainingModePlus
     private static void CleanUpTrainingState()
     {
         foreach (var module in Modules)
-        {
             try
             {
                 module.Unload();
@@ -94,13 +87,9 @@ public static class TrainingModePlus
             {
                 API.LogError($"Exception unloading module {module.GetType().Name}: {ex}");
             }
-        }
     }
 
-    ///
-    ///  Default plugin entry and exit points
-    /// 
-
+    /// Default plugin entry and exit points
     [PluginEntryPoint]
     public static void PluginEntryPoint()
     {
@@ -143,23 +132,16 @@ public static class TrainingModePlus
     private static Assembly OnResolvingCore(AssemblyLoadContext context, AssemblyName assemblyName)
     {
         if (assemblyName.Name == "00_SF6PluginCore")
-        {
             // Search all AssemblyLoadContexts to find where REFramework loaded the Core plugin
             foreach (var alc in AssemblyLoadContext.All)
-            {
-                foreach (var loadedAssembly in alc.Assemblies)
-                {
-                    if (loadedAssembly.GetName().Name == "00_SF6PluginCore")
-                    {
-                        return loadedAssembly;
-                    }
-                }
-            }
-        }
-        API.LogError($"Failed to resolve assembly: {assemblyName.Name}. Ensure that the SF6_Plugin_Core is loaded and accessible.");
+            foreach (var loadedAssembly in alc.Assemblies)
+                if (loadedAssembly.GetName().Name == "00_SF6PluginCore")
+                    return loadedAssembly;
+
+        API.LogError(
+            $"Failed to resolve assembly: {assemblyName.Name}. Ensure that the SF6_Plugin_Core is loaded and accessible.");
 #pragma warning disable CS8603 // Possible null reference return.
         return null; // Let default resolution fail if not found
 #pragma warning restore CS8603 // Possible null reference return.
     }
-
 }

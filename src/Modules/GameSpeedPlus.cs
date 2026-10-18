@@ -1,8 +1,7 @@
 // Core usings
-using SF6_Plugin_Core;
+
 using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
-using SF6_Plugin_Core.UI;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
@@ -13,12 +12,6 @@ namespace SF6_TMP.Modules;
 
 public class GameSpeedPlus : ITrainingModePlusModule
 {
-
-    public static GameSpeedPlus Instance { get; private set; } = new GameSpeedPlus();
-    private GameSpeedPlus() { }
-
-    private readonly List<IUIModificationRequest> _modificationRequests = [];
-
     private static readonly List<int> PathToGamespeedSpinbox = [1, 3];
 
     private static readonly Guid ENV_GAMESPEED_60 = Guid.NewGuid();
@@ -34,6 +27,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
     private static ManagedObject? _customGuideDataMo;
     private static CustomMessage? _newMessage;
 
+    private readonly List<IUIModificationRequest> _modificationRequests = [];
+
+    private GameSpeedPlus()
+    {
+    }
+
+    public static GameSpeedPlus Instance { get; private set; } = new();
+
     public void Init()
     {
         API.LogInfo("Initializing GameSpeedPlus module...");
@@ -41,7 +42,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         // reorder to: Pause, 50%, Standard
         ReorderRequest reorderRequest = new([2, 1, 0]);
 
-        List<(int, UICustomElementNode)> newElements = CreateGameSpeedElements();
+        var newElements = CreateGameSpeedElements();
         AppendElementsRequest appendRequest = new(newElements);
 
         InputGuideHookRequest inputGuideRequest = new(SetCustomGuide);
@@ -74,12 +75,11 @@ public class GameSpeedPlus : ITrainingModePlusModule
         }
 
         // input guide initialization to cache the elements instead of recreating them each time the input guide is queried
-        _newMessage = new("Restore to Standard");
+        _newMessage = new CustomMessage("Restore to Standard");
 
         _customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
         _customGuideDataMo.Globalize();
         _customGuideDataMo.SetGuidField("<MessageId>k__BackingField", _newMessage.Id);
-
     }
 
     public void Unload()
@@ -89,14 +89,12 @@ public class GameSpeedPlus : ITrainingModePlusModule
         {
             PauseMenuManager.ModifyUI(() =>
             {
-                foreach (var request in _modificationRequests)
-                {
-                    PauseMenuManager.UnregisterModification(request);
-                }
+                foreach (var request in _modificationRequests) PauseMenuManager.UnregisterModification(request);
             });
 
             _modificationRequests.Clear();
         }
+
         _customGuideDataMo?.ReleaseIfGlobalized();
         _customGuideDataMo = null;
 
@@ -105,12 +103,13 @@ public class GameSpeedPlus : ITrainingModePlusModule
     }
 
     /// <summary>
-    /// Creates a list of new game speed elements to be added to the training pause menu. Each element is associated with a specific game speed and has its own message ID, function name, and index to attach to in the menu.
+    ///     Creates a list of new game speed elements to be added to the training pause menu. Each element is associated with a
+    ///     specific game speed and has its own message ID, function name, and index to attach to in the menu.
     /// </summary>
     /// <returns></returns>
-    private static List<(int, UICustomElementNode)> CreateGameSpeedElements()
+    private static List<(int, UICustomElementRequestNode)> CreateGameSpeedElements()
     {
-        var newElements = new List<(int, UICustomElementNode)>();
+        var newElements = new List<(int, UICustomElementRequestNode)>();
 
         // Create the new game speed options
         var speedOptionData = new (app.training.GameSpeed speed, string messageID, Guid functionId, int attachToIndex)[]
@@ -123,14 +122,14 @@ public class GameSpeedPlus : ITrainingModePlusModule
             (app.training.GameSpeed.SPEED_120, "120%", ENV_GAMESPEED_120, 1),
             (app.training.GameSpeed.SPEED_130, "130%", ENV_GAMESPEED_130, 1),
             (app.training.GameSpeed.SPEED_140, "140%", ENV_GAMESPEED_140, 1),
-            (app.training.GameSpeed.SPEED_150, "150%", ENV_GAMESPEED_150, 1),
+            (app.training.GameSpeed.SPEED_150, "150%", ENV_GAMESPEED_150, 1)
         };
 
         foreach (var (speed, messageID, functionName, attachToIndex) in speedOptionData)
         {
             var message = new CustomMessage(messageID);
             var initializer = new SpinnerOptionTextInitializer(message);
-            var newElement = new UICustomElementNode(functionName, initializer);
+            var newElement = new UICustomElementRequestNode(functionName, initializer);
 
             // Register the hook for this game speed option
             FunctionHookRequest hookRequest = new((_, _, _) => ChangeGameSpeed(speed));
@@ -144,7 +143,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
     }
 
     /// <summary>
-    /// Captured function to change the game speed. This function accesses the TrainingManager singleton and modifies the game speed settings based on the provided speed index.
+    ///     Captured function to change the game speed. This function accesses the TrainingManager singleton and modifies the
+    ///     game speed settings based on the provided speed index.
     /// </summary>
     /// <param name="speedIndex"></param>
     private static bool ChangeGameSpeed(app.training.GameSpeed speedIndex)
@@ -182,13 +182,15 @@ public class GameSpeedPlus : ITrainingModePlusModule
     }
 
     // delegate for the custom guide hook
-    private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList, ref REFrameworkNET.Collections.IList<string> outStringList)
+    private static void SetCustomGuide(ref REFrameworkNET.Collections.IList<app.InputGuideData> outInputGuideDataList,
+        ref REFrameworkNET.Collections.IList<string> outStringList)
     {
         if (_customGuideDataMo == null)
         {
             API.LogError("Custom guide data ManagedObject is null. Cannot set custom guide.");
             return;
         }
+
         var customGuideData = _customGuideDataMo.As<app.InputGuideData>();
         customGuideData.Type = app.InputGuideDataType.DigitalConfig;
         customGuideData.DigitalConfigId = app.InputAssign.Digital.ConfigId.UI_BACK;
@@ -218,7 +220,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         var entry10 = entriesArray.GetValue(10) as ManagedObject;
         var tf_OS = (entry10 as IObject)?.GetField("value") as ManagedObject;
-        var gameData = ((tf_OS as IObject)?.GetField("_GameData") as ManagedObject)?.As<app.training.tf_OtherSetting.GameLocalData>();
+        var gameData = ((tf_OS as IObject)?.GetField("_GameData") as ManagedObject)
+            ?.As<app.training.tf_OtherSetting.GameLocalData>();
 
         if (gameData == null)
         {
@@ -226,10 +229,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
             return defaultGameSpeed;
         }
 
-        if (gameData.IsMenuPause)
-        {
-            return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
-        }
+        if (gameData.IsMenuPause) return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
 
         if (GameSingletonManager.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
         {
@@ -266,12 +266,13 @@ public class GameSpeedPlus : ITrainingModePlusModule
         return defaultGameSpeed;
     }
 
-    private static bool ResetToDefaultGameSpeed(app.training.BaseParam baseParam, app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
+    private static bool ResetToDefaultGameSpeed(app.training.BaseParam baseParam,
+        app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
     {
         // we first want to find the index of the default game speed
         var childArray = viewData.Data.ChildData;
-        int index = -1;
-        for (int i = 0; i < childArray.Count; i++)
+        var index = -1;
+        for (var i = 0; i < childArray.Count; i++)
         {
             var childData = childArray[i];
             if (childData.FuncType == app.training.TrainingFuncType.ENV_GAME_SPEED_0)
@@ -285,10 +286,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
         var uipart = ManagedProxy<app.UIPartsSpin>.Create(uiFlowParam.SecondaryList.GetFocusItem());
 
         if (uipart.Num == index)
-        {
             // already at default, no need to change
             return false;
-        }
 
         uipart.Num = index;
         var scrollList = ManagedProxy<app.UIPartsScrollList>.Create(uipart.GetChild(0));
@@ -298,5 +297,4 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         return false;
     }
-
 }
