@@ -12,6 +12,7 @@ public class TestingRefactor : ITrainingModePlusModule
 {
     private static readonly Guid TEST_ROW_BUTTON = Guid.NewGuid();
     private static readonly Guid TOGGLE_OTHER_BUTTON = Guid.NewGuid();
+    private static readonly Guid TEST_TAB = Guid.NewGuid();
 
     private readonly List<IUIModificationRequest> _modificationRequests = [];
 
@@ -48,12 +49,20 @@ public class TestingRefactor : ITrainingModePlusModule
 
         PauseMenuAppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
 
+        UICustomElementRequestNode element3 = new(TEST_TAB,
+            new SpinnerOptionTextInitializer(new CustomMessage("Test tab")));
+
+        element3.AddChildren([newElement2]);
+
+        PauseMenuAppendElementsRequest tabAppendRequest = new([(-1, element3)]);
+
         try
         {
             PauseMenuManager.ModifyUI(() =>
             {
                 PauseMenuManager.RegisterModification([1], appendRequest);
                 PauseMenuManager.RegisterModification([0], toggleAppendRequest);
+                PauseMenuManager.RegisterModification([], tabAppendRequest);
             });
         }
         catch (Exception ex)
@@ -63,6 +72,7 @@ public class TestingRefactor : ITrainingModePlusModule
 
         _modificationRequests.Add(appendRequest);
         _modificationRequests.Add(toggleAppendRequest);
+        _modificationRequests.Add(tabAppendRequest);
 
         API.LogInfo("TestingRefactor module initialized!");
     }
