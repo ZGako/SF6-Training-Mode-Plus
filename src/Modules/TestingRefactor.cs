@@ -17,7 +17,7 @@ public class TestingRefactor : ITrainingModePlusModule
 
     private bool _buttonVisible = true;
 
-    private AppendElementsRequest? _randomizerButtonAppendRequest;
+    private PauseMenuAppendElementsRequest? _randomizerButtonAppendRequest;
 
     private TestingRefactor()
     {
@@ -35,7 +35,7 @@ public class TestingRefactor : ITrainingModePlusModule
 
         newElementRequest.AddHook(HookRequest);
 
-        AppendElementsRequest appendRequest = new([(1, newElementRequest)]);
+        PauseMenuAppendElementsRequest appendRequest = new([(1, newElementRequest)]);
         _randomizerButtonAppendRequest = appendRequest;
 
         // create button in another tab, that toggles the first buttons existance
@@ -46,7 +46,7 @@ public class TestingRefactor : ITrainingModePlusModule
 
         newElement2.AddHook(toggleHookReq);
 
-        AppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
+        PauseMenuAppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
 
         try
         {

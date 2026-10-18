@@ -43,7 +43,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         ReorderRequest reorderRequest = new([2, 1, 0]);
 
         var newElements = CreateGameSpeedElements();
-        AppendElementsRequest appendRequest = new(newElements);
+        PauseMenuAppendElementsRequest appendRequest = new(newElements);
 
         InputGuideHookRequest inputGuideRequest = new(SetCustomGuide);
         SpinBoxHookRequest spinBoxRequest = new(GetCurrentGameSpeedFunctionName);
