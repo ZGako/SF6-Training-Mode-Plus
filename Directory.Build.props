@@ -1,5 +1,6 @@
 <Project>
     <PropertyGroup>
         <SF6Dir>C:\Program Files (x86)\Steam\steamapps\common\Street Fighter 6</SF6Dir>
+        <SF6DirLinux>/home/gino/.local/share/Steam/steamapps/common/Street Fighter 6</SF6DirLinux>
     </PropertyGroup>
 </Project>
