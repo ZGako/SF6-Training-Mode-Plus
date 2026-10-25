@@ -37,6 +37,8 @@ public static class TrainingModePlus
             OnTrainingManagerRelease
         );
 
+        GameSingletonManager.RegisterOptionManager(TestingRefactor.TestOptionsMods);
+
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
     }
 
@@ -65,6 +67,7 @@ public static class TrainingModePlus
         try
         {
             CleanUpTrainingState();
+            TestingRefactor.UnloadOptionsMods();
         }
         catch (Exception ex)
         {

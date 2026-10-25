@@ -1,7 +1,8 @@
-using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
+using SF6_Plugin_Core.UI.OptionsSettings.Core;
+using SF6_Plugin_Core.UI.OptionsSettings.CustomOptions;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
@@ -15,7 +16,11 @@ public class TestingRefactor : ITrainingModePlusModule
     private static readonly Guid TOGGLE_OTHER_BUTTON = Guid.NewGuid();
     private static readonly Guid TEST_TAB = Guid.NewGuid();
 
-    private readonly List<IUIModificationRequest> _modificationRequests = [];
+    private static readonly Guid TEST_OPTION_BUTTON = Guid.NewGuid();
+    private static readonly Guid TEST_OPTION_BUTTON2 = Guid.NewGuid();
+    private readonly List<IUIModificationRequest> _optionsModificationRequests = [];
+
+    private readonly List<IUIModificationRequest> _pauseModificationRequests = [];
 
     private bool _buttonVisible = true;
 
@@ -25,7 +30,7 @@ public class TestingRefactor : ITrainingModePlusModule
     {
     }
 
-    public static TestingRefactor Instance { get; private set; } = new();
+    public static TestingRefactor Instance { get; } = new();
 
     public void Init()
     {
@@ -71,23 +76,11 @@ public class TestingRefactor : ITrainingModePlusModule
             API.LogError($"Error registering modification: {ex.Message}");
         }
 
-        _modificationRequests.Add(appendRequest);
-        _modificationRequests.Add(toggleAppendRequest);
-        _modificationRequests.Add(tabAppendRequest);
+        _pauseModificationRequests.Add(appendRequest);
+        _pauseModificationRequests.Add(toggleAppendRequest);
+        _pauseModificationRequests.Add(tabAppendRequest);
 
         API.LogInfo("TestingRefactor module initialized!");
-
-
-        try
-        {
-            API.LogInfo("GAY");
-            var mo = MemoryHelpers.CreateGenericList<app.Option.OptionUnitBase>();
-            API.LogInfo($"address 0x{mo.GetAddress():X}");
-        }
-        catch (Exception ex)
-        {
-            API.LogError($"Error initializing testing options: {ex.Message}");
-        }
     }
 
     public void Unload()
@@ -96,7 +89,7 @@ public class TestingRefactor : ITrainingModePlusModule
         {
             PauseMenuManager.ModifyUI(() =>
             {
-                foreach (var request in _modificationRequests) PauseMenuManager.UnregisterModification(request);
+                foreach (var request in _pauseModificationRequests) PauseMenuManager.UnregisterModification(request);
             });
         }
         catch (Exception ex)
@@ -104,6 +97,46 @@ public class TestingRefactor : ITrainingModePlusModule
             API.LogError($"Error rebuilding UI during unload: {ex.Message}");
         }
     }
+
+    public static void TestOptionsMods()
+    {
+        // Options settings
+        var node2 = new UICustomOptionsGroupNode(TEST_OPTION_BUTTON2, new TextOptionGroupInitializer(
+            new CustomMessage("Test option button 2"),
+            new CustomMessage("Test option description 2")));
+
+        // 2. Appending to an existing tab or group (requires a non-empty path and tuple attachment indices)
+        var appendToTab0 = new OptionsAppendElementsRequest([(-1, node2)]);
+
+        try
+        {
+            OptionsSettingsManager.ModifyUI(() => { OptionsSettingsManager.RegisterModification([0], appendToTab0); });
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Error registering modification: {ex.Message}");
+        }
+
+        Instance._optionsModificationRequests.Add(appendToTab0);
+    }
+
+    public static void UnloadOptionsMods()
+    {
+        OptionsSettingsManager.ModifyUI(() =>
+        {
+            foreach (var request in Instance._optionsModificationRequests)
+                OptionsSettingsManager.UnregisterModification(request);
+        });
+    }
+
+    [MethodHook(typeof(app.Option.OptionSettingUserData), "GetSettingUnits",
+        MethodHookType.Pre)]
+    public static PreHookResult MyPreHook(Span<ulong> args)
+    {
+        API.LogInfo("thing got called!");
+        return PreHookResult.Continue;
+    }
+
 
     private bool ToggleButtonVisibility()
     {
@@ -248,7 +281,7 @@ public class TestingRefactor : ITrainingModePlusModule
             var childrenArray = childrenObj.As<_System.Array>();
 
             // Note: If the method returns a List<T> instead of a raw array, you must grab its 
-            // internal "_items" field first, then cast THAT to _System.Array[cite: 3].
+            // internal "_items" field first, then cast THAT to _System.Array.
             if (childrenArray == null)
             {
                 var itemsField = (childrenObj as IObject)?.GetField("_items") as ManagedObject;
@@ -266,7 +299,7 @@ public class TestingRefactor : ITrainingModePlusModule
             // 3. Iterate over the elements
             for (var i = 0; i < childrenArray.Length; i++)
             {
-                // GetValue returns a ManagedObject for reference-type elements[cite: 3].
+                // GetValue returns a ManagedObject for reference-type elements.
                 var childMo = childrenArray.GetValue(i) as ManagedObject;
                 if (childMo != null)
                 {
@@ -299,7 +332,7 @@ public class TestingRefactor : ITrainingModePlusModule
             var newChildMo = TDB.Get().FindType("via.gui.Text").CreateInstance(0);
 
             // 2. CRITICAL: Tell the engine to keep this object alive permanently.
-            // If you skip this, the C# GC will eventually sweep it, and the game will hard crash[cite: 3].
+            // If you skip this, the C# GC will eventually sweep it, and the game will hard crash.
             newChildMo.Globalize();
 
             // (Optional) Cast it to a typed proxy so you can easily configure it before attaching
@@ -311,7 +344,7 @@ public class TestingRefactor : ITrainingModePlusModule
             }
 
             // 3. Invoke the addChild method you found on your selectItem!
-            // We pass the exact signature to ensure the engine resolves the correct native function[cite: 3].
+            // We pass the exact signature to ensure the engine resolves the correct native function.
             // (selectItem as IObject).Call("addChild(via.gui.PlayObject)", newChildMo);
         }
         catch (Exception ex)
