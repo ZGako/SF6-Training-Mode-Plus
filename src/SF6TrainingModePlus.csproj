@@ -59,16 +59,16 @@
         </ProjectReference>
     </ItemGroup>
 
-    <Target Condition=" '$(SF6Dir)' != '' " Name="BuildAndUpdateScript" AfterTargets="Build">
+    <Target Name="BuildAndUpdateScript" AfterTargets="Build">
+        <!-- Copies to Windows if the directory actually exists -->
+        <Copy Condition=" Exists('$(SF6Dir)') "
+              SourceFiles="$(TargetPath)"
+              DestinationFolder="$(SF6Dir)/reframework/plugins/managed/"/>
 
-        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SF6Dir)/reframework/plugins/managed/"/>
-
-    </Target>
-
-    <Target Condition=" '$(SF6DirLinux)' != '' " Name="BuildAndUpdateScript" AfterTargets="Build">
-
-        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SF6DirLinux)/reframework/plugins/managed/"/>
-
+        <!-- Copies to Linux if the directory actually exists -->
+        <Copy Condition=" Exists('$(SF6DirLinux)') "
+              SourceFiles="$(TargetPath)"
+              DestinationFolder="$(SF6DirLinux)/reframework/plugins/managed/"/>
     </Target>
 
 </Project>

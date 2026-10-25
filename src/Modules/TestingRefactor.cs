@@ -1,3 +1,4 @@
+using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
@@ -75,6 +76,18 @@ public class TestingRefactor : ITrainingModePlusModule
         _modificationRequests.Add(tabAppendRequest);
 
         API.LogInfo("TestingRefactor module initialized!");
+
+
+        try
+        {
+            API.LogInfo("GAY");
+            var mo = MemoryHelpers.CreateGenericList<app.Option.OptionUnitBase>();
+            API.LogInfo($"address 0x{mo.GetAddress():X}");
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Error initializing testing options: {ex.Message}");
+        }
     }
 
     public void Unload()

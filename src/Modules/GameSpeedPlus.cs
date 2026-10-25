@@ -231,7 +231,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         if (gameData.IsMenuPause) return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
 
-        if (GameSingletonManager.TrainingManager?.TData.OtherSetting.Is_Speed_Setting == true)
+        if (GameSingletonManager.TrainingManager.TData.OtherSetting.Is_Speed_Setting)
         {
             var currentSpeed = GameSingletonManager.TrainingManager.TData.OtherSetting.OS_Game_Speed;
 
