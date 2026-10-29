@@ -30,14 +30,11 @@ public static class TrainingModePlus
         API.LogWarning("Loading TrainingModePlus C# plugin...");
 
         Modules.Add(GameSpeedPlus.Instance);
-        Modules.Add(TestingRefactor.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
             OnTrainingManagerReady,
             OnTrainingManagerRelease
         );
-
-        GameSingletonManager.RegisterOptionManager(TestingRefactor.TestOptionsMods);
 
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
     }
