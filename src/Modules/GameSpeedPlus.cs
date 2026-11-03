@@ -74,8 +74,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
             API.LogError($"Error registering modification: {ex.Message}");
         }
 
+        using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
         // input guide initialization to cache the elements instead of recreating them each time the input guide is queried
-        _newMessage = new CustomMessage("Restore to Standard");
+        _newMessage = CustomMessage.FromKey("GameSpeedRestore");
 
         _customGuideDataMo = app.InputGuideData.REFType.CreateInstance(0);
         _customGuideDataMo.Globalize();

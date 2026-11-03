@@ -9,7 +9,7 @@ public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 
     private TrainingParametersAndRandomizer()
     {
-        Features.Add(BlockRandomChance.Instance);
+        Features.Add(RandomBlockChance.Instance);
         // Features.Add(RandomizerManager.Instance);
         // Features.Add(HealthBar.Instance);
     }

@@ -11,6 +11,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using SF6_Plugin_Core;
 using SF6_Plugin_Core.Services;
+using SF6_Plugin_Core.UI.Localization;
 using SF6_TMP.Modules;
 using SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
@@ -22,6 +23,11 @@ namespace SF6_TMP;
 
 public static class TrainingModePlus
 {
+    public static readonly string DirectoryPath = Path.Combine("reframework", "data", "SF6_TrainingModePlus");
+
+    private static readonly string LocalizationFilePath =
+        Path.Combine(DirectoryPath, "SF6_TrainingModePlus_Localization.json");
+
     private static readonly List<ITrainingModePlusModule> Modules = [];
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -29,6 +35,8 @@ public static class TrainingModePlus
     {
         API.LogLevel = 0;
         API.LogWarning("Loading TrainingModePlus C# plugin...");
+
+        LocalizationManager.LoadTranslations(LocalizationFilePath, "TrainingModePlus");
 
         Modules.Add(GameSpeedPlus.Instance);
         Modules.Add(TrainingParametersAndRandomizer.Instance);

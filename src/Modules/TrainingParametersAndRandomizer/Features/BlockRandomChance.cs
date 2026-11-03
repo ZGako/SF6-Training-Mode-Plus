@@ -8,15 +8,15 @@ using SF6_TMP.Modules.TrainingParametersAndRandomizer.Core;
 
 namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Features;
 
-public class BlockRandomChance : ITrainingFeature
+public class RandomBlockChance : ITrainingFeature
 {
     private static readonly List<int> PathToBlockRow = [2, 0, 0, 2, 4];
 
-    private static readonly Guid BLOCK_RANDOM_CHANCE_SPINNER = Guid.NewGuid();
+    private static readonly Guid RANDOM_BLOCK_CHANCE_SPINNER = Guid.NewGuid();
 
     private readonly List<IUIModificationRequest> _modificationRequests = [];
 
-    private BlockRandomChance()
+    private RandomBlockChance()
     {
     }
 
@@ -26,28 +26,27 @@ public class BlockRandomChance : ITrainingFeature
         set => GameSingletonManager.TrainingManager!._tData.GuardSetting.DummyData.GuardWeight = value;
     }
 
-    public static BlockRandomChance Instance { get; private set; } = new();
+    public static RandomBlockChance Instance { get; private set; } = new();
 
     public void Init()
     {
+        using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
         var changeToGuidTypeReq = new FieldOverrideRequest
         {
             Type = app.training.ItemType.SPIN_ITEM_GUIDE,
             GuidIcon = app.InputAssign.Digital.Id.UITrainingOptionY
         };
 
-        var newGuideMessage = new CustomMessage(
-            "Change how the dummy blocks attacks. Select Block Count to have it block only the specified amount of times. When set to random, you can adjust the probability with <INPT id=\"UIReset\" type=\"d\">.");
-
+        var newGuideMessage = CustomMessage.FromKey("RandomBlockPercentageGuide");
 
         var changeParentsGuideReq = new FieldOverrideRequest
         {
             GuideMessage = newGuideMessage
         };
 
-        var submenuSliderNode = new UICustomElementRequestNode(BLOCK_RANDOM_CHANCE_SPINNER,
+        var submenuSliderNode = new UICustomElementRequestNode(RANDOM_BLOCK_CHANCE_SPINNER,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Random Block Probability"),
+                CustomMessage.FromKey("RandomBlockPercentageTitle"),
                 newGuideMessage,
                 (0, 100)));
         var functionHook = new FunctionHookRequest((_, _, index) =>
