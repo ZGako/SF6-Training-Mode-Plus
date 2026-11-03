@@ -59,6 +59,10 @@
         </ProjectReference>
     </ItemGroup>
 
+    <ItemGroup>
+        <Folder Include="Modules\TrainingParametersAndRandomizer\CustomUILogic\"/>
+    </ItemGroup>
+
     <Target Name="BuildAndUpdateScript" AfterTargets="Build">
         <!-- Copies to Windows if the directory actually exists -->
         <Copy Condition=" Exists('$(SF6Dir)') "

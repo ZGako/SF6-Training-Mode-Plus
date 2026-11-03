@@ -1,8 +1,6 @@
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
-using SF6_Plugin_Core.UI.OptionsSettings.Core;
-using SF6_Plugin_Core.UI.OptionsSettings.CustomOptions;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
@@ -16,7 +14,7 @@ public class TestingRefactor : ITrainingModePlusModule
     private static readonly Guid TOGGLE_OTHER_BUTTON = Guid.NewGuid();
     private static readonly Guid TEST_TAB = Guid.NewGuid();
 
-    private static readonly Guid TEST_OPTION_BUTTON = Guid.NewGuid();
+    private static readonly Guid AA_SPINNER = Guid.NewGuid();
     private static readonly Guid TEST_OPTION_BUTTON2 = Guid.NewGuid();
     private readonly List<IUIModificationRequest> _optionsModificationRequests = [];
 
@@ -96,37 +94,6 @@ public class TestingRefactor : ITrainingModePlusModule
         {
             API.LogError($"Error rebuilding UI during unload: {ex.Message}");
         }
-    }
-
-    public static void TestOptionsMods()
-    {
-        // Options settings
-        var node2 = new UICustomOptionsGroupNode(TEST_OPTION_BUTTON2, new TextOptionGroupInitializer(
-            new CustomMessage("Test option button 2"),
-            new CustomMessage("Test option description 2")));
-
-        // 2. Appending to an existing tab or group (requires a non-empty path and tuple attachment indices)
-        var appendToTab0 = new OptionsAppendElementsRequest([(-1, node2)]);
-
-        try
-        {
-            OptionsSettingsManager.ModifyUI(() => { OptionsSettingsManager.RegisterModification([0], appendToTab0); });
-        }
-        catch (Exception ex)
-        {
-            API.LogError($"Error registering modification: {ex.Message}");
-        }
-
-        Instance._optionsModificationRequests.Add(appendToTab0);
-    }
-
-    public static void UnloadOptionsMods()
-    {
-        OptionsSettingsManager.ModifyUI(() =>
-        {
-            foreach (var request in Instance._optionsModificationRequests)
-                OptionsSettingsManager.UnregisterModification(request);
-        });
     }
 
     [MethodHook(typeof(app.Option.OptionSettingUserData), "GetSettingUnits",

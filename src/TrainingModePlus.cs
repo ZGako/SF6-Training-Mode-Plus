@@ -12,6 +12,7 @@ using System.Runtime.Loader;
 using SF6_Plugin_Core;
 using SF6_Plugin_Core.Services;
 using SF6_TMP.Modules;
+using SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
 // Core usings
 
@@ -30,6 +31,7 @@ public static class TrainingModePlus
         API.LogWarning("Loading TrainingModePlus C# plugin...");
 
         Modules.Add(GameSpeedPlus.Instance);
+        Modules.Add(TrainingParametersAndRandomizer.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
             OnTrainingManagerReady,
@@ -52,7 +54,7 @@ public static class TrainingModePlus
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void UnloadPlugin()
+    private static void UnloadPlugin()
     {
         API.LogInfo("Unloading TrainingModePlus C# plugin...");
 
@@ -64,7 +66,6 @@ public static class TrainingModePlus
         try
         {
             CleanUpTrainingState();
-            TestingRefactor.UnloadOptionsMods();
         }
         catch (Exception ex)
         {
