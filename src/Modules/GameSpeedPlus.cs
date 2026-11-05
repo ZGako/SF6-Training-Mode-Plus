@@ -129,7 +129,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         foreach (var (speed, messageID, functionName, attachToIndex) in speedOptionData)
         {
             var message = new CustomMessage(messageID);
-            var initializer = new SpinnerOptionTextInitializer(message);
+            var initializer = new SpinnerItemTextInitializer(message);
             var newElement = new UICustomElementRequestNode(functionName, initializer);
 
             // Register the hook for this game speed option

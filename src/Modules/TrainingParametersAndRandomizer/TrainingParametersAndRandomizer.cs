@@ -9,9 +9,6 @@ public class TrainingParametersAndRandomizer : ITrainingModePlusModule
 
     private TrainingParametersAndRandomizer()
     {
-        Features.Add(RandomBlockChance.Instance);
-        // Features.Add(RandomizerManager.Instance);
-        // Features.Add(HealthBar.Instance);
     }
 
     public static TrainingParametersAndRandomizer Instance { get; private set; } = new();
@@ -19,6 +16,10 @@ public class TrainingParametersAndRandomizer : ITrainingModePlusModule
     public void Init()
     {
         API.LogInfo("TrainingParametersAndRandomizer module initialized!");
+
+        Features.Add(RandomBlockChance.Instance);
+        Features.Add(HealthBar.Instance);
+        // Features.Add(RandomBlockChance.Instance);
 
         foreach (var feature in Features) feature.Init();
     }

@@ -10,7 +10,7 @@ namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Features;
 
 public class RandomBlockChance : ITrainingFeature
 {
-    private static readonly List<int> PathToBlockRow = [2, 0, 0, 2, 4];
+    private static readonly List<int> PathToBlockRow = [2, 0, 0, 2];
 
     private static readonly Guid RANDOM_BLOCK_CHANCE_SPINNER = Guid.NewGuid();
 
@@ -56,7 +56,7 @@ public class RandomBlockChance : ITrainingFeature
         });
         var spinnerHook = new SubMenuSpinnerHookRequest(
             () => CurrentValueTest,
-            val => $"{val}%");
+            val => ($"{val}%", val != 50));
         submenuSliderNode.AddHook(functionHook);
         submenuSliderNode.AddHook(spinnerHook);
 
@@ -81,10 +81,10 @@ public class RandomBlockChance : ITrainingFeature
         {
             PauseMenuManager.ModifyUI(() =>
             {
-                PauseMenuManager.RegisterModification(PathToBlockRow, changeToGuidTypeReq);
-                PauseMenuManager.RegisterModification(PathToBlockRow, appendReq);
-                PauseMenuManager.RegisterModification([2, 0, 0, 2], optionYHook);
-                PauseMenuManager.RegisterModification([2, 0, 0, 2], changeParentsGuideReq);
+                PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], changeToGuidTypeReq);
+                PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], appendReq);
+                PauseMenuManager.RegisterModification(PathToBlockRow, optionYHook);
+                PauseMenuManager.RegisterModification(PathToBlockRow, changeParentsGuideReq);
             });
         }
         catch (Exception ex)

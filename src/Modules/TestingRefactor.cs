@@ -54,7 +54,7 @@ public class TestingRefactor : ITrainingModePlusModule
         PauseMenuAppendElementsRequest toggleAppendRequest = new([(-1, newElement2)]);
 
         UICustomElementRequestNode element3 = new(TEST_TAB,
-            new SpinnerOptionTextInitializer(new CustomMessage("Test tab")));
+            new SpinnerItemTextInitializer(new CustomMessage("Test tab")));
 
         element3.AddChildren([newElement2]);
 
