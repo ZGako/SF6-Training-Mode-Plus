@@ -47,17 +47,21 @@ public static class TrainingModePlus
         );
 
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
+
+        ModConfig.Load();
     }
 
     private static void OnTrainingManagerReady()
     {
         API.LogInfo("TrainingManager initialized!");
+        ModConfig.Load();
         foreach (var module in Modules) module.Init();
     }
 
     private static void OnTrainingManagerRelease()
     {
         CleanUpTrainingState();
+        ModConfig.Save();
         API.LogInfo("TrainingManager released. Mod state cleaned up.");
     }
 
@@ -74,6 +78,7 @@ public static class TrainingModePlus
         try
         {
             CleanUpTrainingState();
+            ModConfig.Clear();
         }
         catch (Exception ex)
         {

@@ -1,5 +1,4 @@
 ﻿using SF6_Plugin_Core.Services;
-using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
@@ -8,27 +7,23 @@ using SF6_TMP.Modules.TrainingParametersAndRandomizer.Core;
 
 namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Features;
 
-public class RandomBlockChance : ITrainingFeature
+public class RandomBlockChance : TrainingFeatureBase<RandomBlockChance>
 {
     private static readonly List<int> PathToBlockRow = [2, 0, 0, 2];
 
     private static readonly Guid RANDOM_BLOCK_CHANCE_SPINNER = Guid.NewGuid();
 
-    private readonly List<IUIModificationRequest> _modificationRequests = [];
-
     private RandomBlockChance()
     {
     }
 
-    private static ushort CurrentValueTest
+    private static ushort CurrentRandomProbability
     {
         get => GameSingletonManager.TrainingManager!._tData.GuardSetting.DummyData.GuardWeight;
         set => GameSingletonManager.TrainingManager!._tData.GuardSetting.DummyData.GuardWeight = value;
     }
 
-    public static RandomBlockChance Instance { get; private set; } = new();
-
-    public void Init()
+    public override void Init()
     {
         using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
         var changeToGuidTypeReq = new FieldOverrideRequest
@@ -51,11 +46,11 @@ public class RandomBlockChance : ITrainingFeature
                 (0, 100)));
         var functionHook = new FunctionHookRequest((_, _, index) =>
         {
-            CurrentValueTest = (ushort)index;
+            CurrentRandomProbability = (ushort)index;
             return false;
         });
         var spinnerHook = new SubMenuSpinnerHookRequest(
-            () => CurrentValueTest,
+            () => CurrentRandomProbability,
             val => ($"{val}%", val != 50));
         submenuSliderNode.AddHook(functionHook);
         submenuSliderNode.AddHook(spinnerHook);
@@ -92,22 +87,9 @@ public class RandomBlockChance : ITrainingFeature
             API.LogError($"Exception in BlockRandomChange: {ex.Message}");
         }
 
-        _modificationRequests.Add(changeToGuidTypeReq);
-        _modificationRequests.Add(appendReq);
-        _modificationRequests.Add(optionYHook);
-        _modificationRequests.Add(changeParentsGuideReq);
-    }
-
-    public void Unload()
-    {
-        if (_modificationRequests.Count > 0)
-        {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                foreach (var request in _modificationRequests) PauseMenuManager.UnregisterModification(request);
-            });
-
-            _modificationRequests.Clear();
-        }
+        ModificationRequests.Add(changeToGuidTypeReq);
+        ModificationRequests.Add(appendReq);
+        ModificationRequests.Add(optionYHook);
+        ModificationRequests.Add(changeParentsGuideReq);
     }
 }
