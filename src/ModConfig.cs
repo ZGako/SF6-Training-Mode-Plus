@@ -153,9 +153,9 @@ public class ConfigSection
         return result;
     }
 
-    internal void Clear()
+    internal void ClearSection()
     {
-        foreach (var child in _children.Values) child.Clear();
+        foreach (var child in _children.Values) child.ClearSection();
         _children.Clear();
         _cachedNode = new JsonObject();
         _serializeSelf = null;
@@ -232,6 +232,7 @@ public class ModConfig : ConfigSection
     /// </summary>
     public static void Clear()
     {
+        Instance?.ClearSection();
         OnConfigChanged = null;
         Instance = null!;
     }

@@ -33,10 +33,13 @@ public abstract class TrainingFeatureBase<T> : ITrainingFeatureBase
     {
         try
         {
+            if (ModificationRequests.Count <= 0) return;
             PauseMenuManager.ModifyUI(() =>
             {
-                foreach (var request in ModificationRequests) PauseMenuManager.UnregisterModification(request);
+                foreach (var request in ModificationRequests)
+                    PauseMenuManager.UnregisterModification(request);
             });
+            ModificationRequests.Clear();
         }
         catch (Exception ex)
         {
