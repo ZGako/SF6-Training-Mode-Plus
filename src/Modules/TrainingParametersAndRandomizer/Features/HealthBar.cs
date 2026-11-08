@@ -61,6 +61,16 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
 
+        var changeGuideMessageP1Req = new FieldOverrideRequest
+        {
+            GuideMessage = CustomMessage.FromKey("VitalitySliderGuideP1")
+        };
+
+        var changeGuideMessageP2Req = new FieldOverrideRequest
+        {
+            GuideMessage = CustomMessage.FromKey("VitalitySliderGuideP2")
+        };
+
         var submenuOpenHookP1 = new OptionXHookRequest((baseParam, viewData, _) =>
         {
             if (viewData.Data.FuncType == app.training.TrainingFuncType.PARAMETER_VITAL_1P)
@@ -75,10 +85,13 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
             return false;
         });
 
+        var submenuP1InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+        var submenuP2InputGuideHook = submenuP1InputGuideHook.Clone();
+
         var enableSpinnerP1 = new UICustomElementRequestNode(HP_P1_RANDOMIZER_ENABLE_SPINNER,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Randomize Vitality Gauge P1"),
-                new CustomMessage("randomize the vitality "),
+                CustomMessage.FromKey("HealthBarRandomizeP1Title"),
+                CustomMessage.FromKey("HealthBarRandomizeP1Description"),
                 (0, 1)));
 
         enableSpinnerP1.AddHook(new SubMenuSpinnerHookRequest(
@@ -87,8 +100,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         var upperBoundSpinnerP1 = new UICustomElementRequestNode(HP_P1_RANDOMIZER_UPPER_BOUND,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Upper Bound Randomization P1 Health"),
-                new CustomMessage("set the upper bound"), (0, 100), EnabledP1));
+                CustomMessage.FromKey("HealthBarUpperBoundP1Title"),
+                CustomMessage.FromKey("HealthBarUpperBoundP1Description"), (0, 100), EnabledP1));
 
         upperBoundSpinnerP1.AddHook(new SubMenuSpinnerHookRequest(
             () => _config.UpperBoundP1,
@@ -103,8 +116,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         var lowerBoundSpinnerP1 = new UICustomElementRequestNode(HP_P1_RANDOMIZER_LOWER_BOUND,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Lower Bound Randomization P1 Health"),
-                new CustomMessage("set the lower bound"), (0, 100), EnabledP1));
+                CustomMessage.FromKey("HealthBarLowerBoundP1Title"),
+                CustomMessage.FromKey("HealthBarLowerBoundP1Description"), (0, 100), EnabledP1));
 
         lowerBoundSpinnerP1.AddHook(new SubMenuSpinnerHookRequest(
             () => _config.LowerBoundP1,
@@ -159,8 +172,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         var enableSpinnerP2 = new UICustomElementRequestNode(HP_P2_RANDOMIZER_ENABLE_SPINNER,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Randomize Vitality Gauge P2"),
-                new CustomMessage("randomize the vitality "),
+                CustomMessage.FromKey("HealthBarRandomizeP2Title"),
+                CustomMessage.FromKey("HealthBarRandomizeP2Description"),
                 (0, 1)));
 
         enableSpinnerP2.AddHook(new SubMenuSpinnerHookRequest(
@@ -169,8 +182,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         var upperBoundSpinnerP2 = new UICustomElementRequestNode(HP_P2_RANDOMIZER_UPPER_BOUND,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Upper Bound Randomization P2 Health"),
-                new CustomMessage("set the upper bound"), (0, 100), EnabledP2));
+                CustomMessage.FromKey("HealthBarUpperBoundP2Title"),
+                CustomMessage.FromKey("HealthBarUpperBoundP2Description"), (0, 100), EnabledP2));
 
         upperBoundSpinnerP2.AddHook(new SubMenuSpinnerHookRequest(
             () => _config.UpperBoundP2,
@@ -185,8 +198,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         var lowerBoundSpinnerP2 = new UICustomElementRequestNode(HP_P2_RANDOMIZER_LOWER_BOUND,
             new SubMenuSpinnerInitializer(
-                new CustomMessage("Lower Bound Randomization P2 Health"),
-                new CustomMessage("set the lower bound"), (0, 100), EnabledP2));
+                CustomMessage.FromKey("HealthBarLowerBoundP2Title"),
+                CustomMessage.FromKey("HealthBarLowerBoundP2Description"), (0, 100), EnabledP2));
 
         lowerBoundSpinnerP2.AddHook(new SubMenuSpinnerHookRequest(
             () => _config.LowerBoundP2,
@@ -227,9 +240,14 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         try
         {
+            PauseMenuManager.RegisterModification(PathToHPSliderP1, changeGuideMessageP1Req);
             PauseMenuManager.RegisterModification(PathToHPSliderP1, submenuOpenHookP1);
+            PauseMenuManager.RegisterModification(PathToHPSliderP1, submenuP1InputGuideHook);
             PauseMenuManager.RegisterModification(PathToHPSliderP1, appendChildP1Req);
+
+            PauseMenuManager.RegisterModification(PathToHPSliderP2, changeGuideMessageP2Req);
             PauseMenuManager.RegisterModification(PathToHPSliderP2, submenuOpenHookP2);
+            PauseMenuManager.RegisterModification(PathToHPSliderP2, submenuP2InputGuideHook);
             PauseMenuManager.RegisterModification(PathToHPSliderP2, appendChildP2Req);
         }
         catch (Exception ex)
@@ -237,8 +255,10 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
             API.LogError($"Exception in BlockRandomChange: {ex.Message}");
         }
 
+        ModificationRequests.Add(changeGuideMessageP1Req);
         ModificationRequests.Add(submenuOpenHookP1);
         ModificationRequests.Add(appendChildP1Req);
+        ModificationRequests.Add(changeGuideMessageP2Req);
         ModificationRequests.Add(submenuOpenHookP2);
         ModificationRequests.Add(appendChildP2Req);
     }
