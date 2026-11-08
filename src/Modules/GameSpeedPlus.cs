@@ -51,23 +51,20 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
         try
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, reorderRequest);
-                _modificationRequests.Add(reorderRequest);
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, reorderRequest);
+            _modificationRequests.Add(reorderRequest);
 
-                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, appendRequest);
-                _modificationRequests.Add(appendRequest);
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, appendRequest);
+            _modificationRequests.Add(appendRequest);
 
-                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, inputGuideRequest);
-                _modificationRequests.Add(inputGuideRequest);
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, inputGuideRequest);
+            _modificationRequests.Add(inputGuideRequest);
 
-                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, spinBoxRequest);
-                _modificationRequests.Add(spinBoxRequest);
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, spinBoxRequest);
+            _modificationRequests.Add(spinBoxRequest);
 
-                PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, optionSelectRequest);
-                _modificationRequests.Add(optionSelectRequest);
-            });
+            PauseMenuManager.RegisterModification(PathToGamespeedSpinbox, optionSelectRequest);
+            _modificationRequests.Add(optionSelectRequest);
         }
         catch (Exception ex)
         {
@@ -88,10 +85,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         API.LogInfo("Unloading GameSpeedPlus module...");
         if (_modificationRequests.Count > 0)
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                foreach (var request in _modificationRequests) PauseMenuManager.UnregisterModification(request);
-            });
+            foreach (var request in _modificationRequests) PauseMenuManager.UnregisterModification(request);
 
             _modificationRequests.Clear();
         }

@@ -65,7 +65,7 @@ public class RandomizerManager : TrainingFeatureBase<RandomizerManager>
 
         try
         {
-            PauseMenuManager.ModifyUI(() => { PauseMenuManager.RegisterModification([1], appendButtonReq); });
+            PauseMenuManager.RegisterModification([1], appendButtonReq);
         }
         catch (Exception ex)
         {

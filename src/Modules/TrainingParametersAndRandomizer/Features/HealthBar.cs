@@ -227,13 +227,10 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         try
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                PauseMenuManager.RegisterModification(PathToHPSliderP1, submenuOpenHookP1);
-                PauseMenuManager.RegisterModification(PathToHPSliderP1, appendChildP1Req);
-                PauseMenuManager.RegisterModification(PathToHPSliderP2, submenuOpenHookP2);
-                PauseMenuManager.RegisterModification(PathToHPSliderP2, appendChildP2Req);
-            });
+            PauseMenuManager.RegisterModification(PathToHPSliderP1, submenuOpenHookP1);
+            PauseMenuManager.RegisterModification(PathToHPSliderP1, appendChildP1Req);
+            PauseMenuManager.RegisterModification(PathToHPSliderP2, submenuOpenHookP2);
+            PauseMenuManager.RegisterModification(PathToHPSliderP2, appendChildP2Req);
         }
         catch (Exception ex)
         {

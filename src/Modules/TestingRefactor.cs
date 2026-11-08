@@ -62,12 +62,9 @@ public class TestingRefactor : ITrainingModePlusModule
 
         try
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                PauseMenuManager.RegisterModification([1], appendRequest);
-                PauseMenuManager.RegisterModification([0], toggleAppendRequest);
-                PauseMenuManager.RegisterModification([], tabAppendRequest);
-            });
+            PauseMenuManager.RegisterModification([1], appendRequest);
+            PauseMenuManager.RegisterModification([0], toggleAppendRequest);
+            PauseMenuManager.RegisterModification([], tabAppendRequest);
         }
         catch (Exception ex)
         {
@@ -85,14 +82,11 @@ public class TestingRefactor : ITrainingModePlusModule
     {
         try
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                foreach (var request in _pauseModificationRequests) PauseMenuManager.UnregisterModification(request);
-            });
+            foreach (var request in _pauseModificationRequests) PauseMenuManager.UnregisterModification(request);
         }
         catch (Exception ex)
         {
-            API.LogError($"Error rebuilding UI during unload: {ex.Message}");
+            API.LogError($"Error unregistering UI modifications during unload: {ex.Message}");
         }
     }
 
@@ -109,14 +103,11 @@ public class TestingRefactor : ITrainingModePlusModule
     {
         _buttonVisible = !_buttonVisible;
 
-        PauseMenuManager.ModifyUI(() =>
-        {
-            if (_buttonVisible)
-                // Show the button
-                PauseMenuManager.RegisterModification([1], _randomizerButtonAppendRequest!);
-            else
-                PauseMenuManager.UnregisterModification(_randomizerButtonAppendRequest!);
-        });
+        if (_buttonVisible)
+            // Show the button
+            PauseMenuManager.RegisterModification([1], _randomizerButtonAppendRequest!);
+        else
+            PauseMenuManager.UnregisterModification(_randomizerButtonAppendRequest!);
 
         return false;
     }

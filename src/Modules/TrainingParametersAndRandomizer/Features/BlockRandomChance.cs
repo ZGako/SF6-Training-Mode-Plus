@@ -74,13 +74,10 @@ public class RandomBlockChance : TrainingFeatureBase<RandomBlockChance>
 
         try
         {
-            PauseMenuManager.ModifyUI(() =>
-            {
-                PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], changeToGuidTypeReq);
-                PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], appendReq);
-                PauseMenuManager.RegisterModification(PathToBlockRow, optionYHook);
-                PauseMenuManager.RegisterModification(PathToBlockRow, changeParentsGuideReq);
-            });
+            PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], changeToGuidTypeReq);
+            PauseMenuManager.RegisterModification([.. PathToBlockRow, 4], appendReq);
+            PauseMenuManager.RegisterModification(PathToBlockRow, optionYHook);
+            PauseMenuManager.RegisterModification(PathToBlockRow, changeParentsGuideReq);
         }
         catch (Exception ex)
         {

@@ -34,16 +34,13 @@ public abstract class TrainingFeatureBase<T> : ITrainingFeatureBase
         try
         {
             if (ModificationRequests.Count <= 0) return;
-            PauseMenuManager.ModifyUI(() =>
-            {
-                foreach (var request in ModificationRequests)
-                    PauseMenuManager.UnregisterModification(request);
-            });
+            foreach (var request in ModificationRequests)
+                PauseMenuManager.UnregisterModification(request);
             ModificationRequests.Clear();
         }
         catch (Exception ex)
         {
-            API.LogError($"Error rebuilding UI during unload: {ex.Message}");
+            API.LogError($"Error unregistering UI modifications during unload: {ex.Message}");
         }
     }
 
