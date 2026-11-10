@@ -27,6 +27,7 @@ public class RandomizerManager : TrainingFeatureBase<RandomizerManager>
     {
         // add all the features to the Features list here
         randomizableFeatures.Add(HealthBar.Instance);
+        randomizableFeatures.Add(PositionalSettings.Instance);
     }
 
     public override void Init()

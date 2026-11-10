@@ -57,8 +57,11 @@ public abstract class TrainingFeatureBase<T> : ITrainingFeatureBase
 
         // Enforce the private constructor rule at runtime
         if (constructor == null || !constructor.IsPrivate)
+        {
+            API.LogError($"Singleton failure: {type.Name} MUST have a private parameterless constructor.");
             throw new InvalidOperationException(
                 $"Singleton failure: {type.Name} MUST have a private parameterless constructor.");
+        }
 
         // Invoke the private constructor to create the instance
         return (T)constructor.Invoke(null);

@@ -30,7 +30,7 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
             nameof(HealthBar),
             () => _config,
             cfg => _config = cfg,
-            ConfigJsonContext.Default.Config);
+            HealthBarConfigJsonContext.Default.Config);
     }
 
     private bool EnabledP1
@@ -280,7 +280,7 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip)]
     [JsonSerializable(typeof(Config))]
-    private partial class ConfigJsonContext : JsonSerializerContext;
+    private partial class HealthBarConfigJsonContext : JsonSerializerContext;
 
     private class Config
     {

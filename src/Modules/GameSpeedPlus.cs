@@ -144,35 +144,13 @@ public class GameSpeedPlus : ITrainingModePlusModule
     /// <param name="speedIndex"></param>
     private static bool ChangeGameSpeed(app.training.GameSpeed speedIndex)
     {
-        if (GameSingletonManager.TrainingManager == null)
-        {
-            API.LogError("TrainingManager is null. Cannot initialize GameSpeedPlus module.");
-            return false;
-        }
-
+        var tm = GameSingletonManager.TrainingManager!;
         // get nested members of the singleton for easier access
-        var tfFuncs = GameSingletonManager.TrainingManager._tfFuncs as IObject;
-        var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
 
-        if (entriesArray != null && entriesArray.Length > 10)
-        {
-            var entry10 = entriesArray.GetValue(10) as ManagedObject;
-            var tf_OS = (entry10 as IObject)?.GetField("value") as ManagedObject;
-            var funcList = (tf_OS as IObject)?.GetField("FuncList") as ManagedObject;
-
-            // 2. Call the methods safely
-            if (funcList is IObject funcListObj)
-            {
-                funcListObj.Call("SetActiveGameSpeed(System.Boolean)", true);
-                funcListObj.Call("SetMenuPause(System.Boolean)", false);
-
-                // Apply your custom speed here
-                funcListObj.Call("SetGameSpeed(app.training.GameSpeed)", (int)speedIndex);
-                return false;
-            }
-        }
-
-        API.LogError("Failed to change game speed. Could not access the necessary fields.");
+        var tmOtherFunc = tm.OtherFunc;
+        tmOtherFunc.SetActiveGameSpeed(true);
+        tmOtherFunc.SetMenuPause(false);
+        tmOtherFunc.SetGameSpeed(speedIndex);
         return false;
     }
 
