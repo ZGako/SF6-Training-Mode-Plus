@@ -57,7 +57,7 @@ public class RandomizerManager : TrainingFeatureBase<RandomizerManager>
         {
             foreach (var feature in randomizableFeatures) feature.Randomize();
 
-            GameSingletonManager.TrainingManager!._IsReqRefresh = true;
+            GameSingletonManager.TrainingManager!.MenuFunc.RestartGame(false);
 
             return true;
         }));

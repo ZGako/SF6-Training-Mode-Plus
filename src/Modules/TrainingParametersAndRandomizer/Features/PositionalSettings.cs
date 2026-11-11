@@ -75,19 +75,11 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private static Config _config = new();
 
-    private static bool _screenPosInitialized;
     private static ScreenPositionType _initialScreenPosition = ScreenPositionType.Center;
     private static int _initialScreenPositionValue;
 
-    private static bool _relativePosInitialized;
     private static RelativePositionType _initialRelativePosition = RelativePositionType.Roundstart;
     private static int _initialRelativePositionValue = 300;
-
-    private static bool _refreshCallbackRegistered;
-    private static bool _skipNextRefreshCheck;
-
-    private static ScreenPositionType _currentScreenPosition = ScreenPositionType.Center;
-    private static RelativePositionType _currentRelativePosition = RelativePositionType.Roundstart;
 
     private readonly List<UICustomElementRequestNode> _relativeRandomizerDependentNodes = [];
     private readonly List<UICustomElementRequestNode> _screenRandomizerDependentNodes = [];
@@ -131,33 +123,9 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         }
     }
 
-    private static ScreenPositionType CurrentScreenPosition
-    {
-        get => _currentScreenPosition;
-        set
-        {
-            _currentScreenPosition = value;
-            if (_screenPosInitialized) return;
-            _initialScreenPosition = value;
-            _initialScreenPositionValue = value.Value;
-            _screenPosInitialized = true;
-            RegisterRefreshCheck();
-        }
-    }
+    private static ScreenPositionType CurrentScreenPosition { get; set; } = ScreenPositionType.Center;
 
-    private static RelativePositionType CurrentRelativePosition
-    {
-        get => _currentRelativePosition;
-        set
-        {
-            _currentRelativePosition = value;
-            if (_relativePosInitialized) return;
-            _initialRelativePosition = value;
-            _initialRelativePositionValue = value.Value;
-            _relativePosInitialized = true;
-            RegisterRefreshCheck();
-        }
-    }
+    private static RelativePositionType CurrentRelativePosition { get; set; } = RelativePositionType.Roundstart;
 
     private static bool OpeningRandomizerSubmenu { get; set; }
 
@@ -321,34 +289,31 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 MinScreenPos);
     }
 
-    private static void RegisterRefreshCheck()
+    [MethodHook(typeof(app.training.UITrainingMenu), "StartMenu(System.Int32, app.training.BaseParam)", MethodHookType.Post)]
+    public static void OnStartMenu(ref ulong _)
     {
-        if (_refreshCallbackRegistered) return;
-        _refreshCallbackRegistered = true;
-        PauseMenuManager.RequestTrainingModeRefreshOnMenuExit(ShouldRefreshTrainingMode);
+        GetCurrentScreenPosition(null!);
+        GetCurrentRelativePosition(null!);
+
+        _initialScreenPosition = CurrentScreenPosition;
+        _initialScreenPositionValue = CurrentScreenPosition.Value;
+        _initialRelativePosition = CurrentRelativePosition;
+        _initialRelativePositionValue = CurrentRelativePosition.Value;
     }
 
-    private static bool ShouldRefreshTrainingMode()
+    [MethodHook(typeof(app.training.UITrainingMenu), "OnCancelStart()", MethodHookType.Pre)]
+    public static PreHookResult OnCancelStart(Span<ulong> _)
     {
-        var screenPosChanged = _screenPosInitialized &&
-                               (_currentScreenPosition != _initialScreenPosition ||
-                                _currentScreenPosition.Value != _initialScreenPositionValue);
+        var screenPosChanged = CurrentScreenPosition != _initialScreenPosition ||
+                               CurrentScreenPosition.Value != _initialScreenPositionValue;
 
-        var relativePosChanged = _relativePosInitialized &&
-                                 (_currentRelativePosition != _initialRelativePosition ||
-                                  _currentRelativePosition.Value != _initialRelativePositionValue);
+        var relativePosChanged = CurrentRelativePosition != _initialRelativePosition ||
+                                 CurrentRelativePosition.Value != _initialRelativePositionValue;
 
-        _screenPosInitialized = false;
-        _relativePosInitialized = false;
-        _refreshCallbackRegistered = false;
+        if (screenPosChanged || relativePosChanged)
+            GameSingletonManager.TrainingManager?.MenuFunc.RestartGame(false);
 
-        if (_skipNextRefreshCheck)
-        {
-            _skipNextRefreshCheck = false;
-            return false;
-        }
-
-        return screenPosChanged || relativePosChanged;
+        return PreHookResult.Continue;
     }
 
     public override void Init()
@@ -1142,8 +1107,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     public override void Randomize()
     {
-        _skipNextRefreshCheck = true;
-
         var tm = GameSingletonManager.TrainingManager!;
 
         if (EnabledSideRandomizer)
@@ -1158,7 +1121,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 var lower = Math.Clamp(_config.RelativeLowerBoundPreset, 0, RelativePresetOptions.Length - 1);
                 var upper = Math.Clamp(_config.RelativeUpperBoundPreset, lower, RelativePresetOptions.Length - 1);
                 var index = Random.Shared.Next(lower, upper + 1);
-                _currentRelativePosition = RelativePresetOptions[index].Type;
+                CurrentRelativePosition = RelativePresetOptions[index].Type;
             }
             else
             {
@@ -1166,7 +1129,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                     GetMaxRelativeDistance());
                 var upper = Math.Clamp(_config.RelativeUpperBoundUnits, lower, GetMaxRelativeDistance());
                 _config.CustomRelativePosValue = Random.Shared.Next(lower, upper + 1);
-                _currentRelativePosition = RelativePositionType.CustomRange;
+                CurrentRelativePosition = RelativePositionType.CustomRange;
             }
         }
 
@@ -1177,14 +1140,14 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 var lower = Math.Clamp(_config.ScreenLowerBoundPreset, 0, ScreenPresetOptions.Length - 1);
                 var upper = Math.Clamp(_config.ScreenUpperBoundPreset, lower, ScreenPresetOptions.Length - 1);
                 var index = Random.Shared.Next(lower, upper + 1);
-                _currentScreenPosition = ScreenPresetOptions[index].Type;
+                CurrentScreenPosition = ScreenPresetOptions[index].Type;
             }
             else
             {
                 var lower = Math.Clamp(_config.ScreenLowerBoundUnits, MinScreenPos, MaxScreenPos);
                 var upper = Math.Clamp(_config.ScreenUpperBoundUnits, lower, MaxScreenPos);
                 _config.CustomScreenPosition = Random.Shared.Next(lower, upper + 1);
-                _currentScreenPosition = ScreenPositionType.CustomPosition;
+                CurrentScreenPosition = ScreenPositionType.CustomPosition;
             }
         }
 
