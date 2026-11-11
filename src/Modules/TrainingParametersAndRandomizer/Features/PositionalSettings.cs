@@ -48,6 +48,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     private static readonly Guid SCREEN_POS_SUBMENU_UPPER_BOUND = Guid.NewGuid();
     private static readonly Guid SCREEN_POS_SUBMENU_LOWER_BOUND = Guid.NewGuid();
 
+    private static readonly Guid SIDE_SUBMENU_ENABLE_RANDOMIZER = Guid.NewGuid();
+
     private static readonly (string Name, RelativePositionType Type)[] RelativePresetOptions =
     [
         ("Point Blank", RelativePositionType.PointBlank),
@@ -105,7 +107,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         set
         {
             _config.EnabledRelativePositionRandomizer = value;
-            IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+            UpdateRandomizedEnabledState();
         }
     }
 
@@ -115,7 +117,17 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         set
         {
             _config.EnabledScreenPositionRandomizer = value;
-            IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+            UpdateRandomizedEnabledState();
+        }
+    }
+
+    private bool EnabledSideRandomizer
+    {
+        get => _config.EnabledSideRandomizer;
+        set
+        {
+            _config.EnabledSideRandomizer = value;
+            UpdateRandomizedEnabledState();
         }
     }
 
@@ -148,6 +160,13 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     }
 
     private static bool OpeningRandomizerSubmenu { get; set; }
+
+    private void UpdateRandomizedEnabledState()
+    {
+        IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer ||
+                              _config.EnabledScreenPositionRandomizer ||
+                              _config.EnabledSideRandomizer;
+    }
 
     private static string FormatUnits(int value)
     {
@@ -344,7 +363,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         else
             SyncScreenPresetsFromUnits();
 
-        IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+        UpdateRandomizedEnabledState();
         _relativeRandomizerDependentNodes.Clear();
         _screenRandomizerDependentNodes.Clear();
 
@@ -457,6 +476,26 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             new PauseMenuAppendElementsRequest(
                 [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
 
+        var sideOptionXHook = new OptionXHookRequest((baseParam, _, _) =>
+        {
+            OpeningRandomizerSubmenu = true;
+            GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                baseParam);
+            GameSingletonManager.TrainingManager?.RequestSE(
+                app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                0);
+
+            return false;
+        });
+
+        var side0InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+        var side1InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+
+        var side0SubmenuReq =
+            new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
+        var side1SubmenuReq =
+            new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
+
         try
         {
             PauseMenuManager.RegisterModification([1], appendRelativeReq);
@@ -495,11 +534,47 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             ModificationRequests.Add(screenPosOptionYHook);
             PauseMenuManager.RegisterModification([1, 1], screenPosOptionXHook);
             ModificationRequests.Add(screenPosOptionXHook);
+
+            PauseMenuManager.RegisterModification([1, 2, 0], side0InputGuideHook);
+            ModificationRequests.Add(side0InputGuideHook);
+            PauseMenuManager.RegisterModification([1, 2, 1], side1InputGuideHook);
+            ModificationRequests.Add(side1InputGuideHook);
+
+            PauseMenuManager.RegisterModification([1, 2, 0], side0SubmenuReq);
+            ModificationRequests.Add(side0SubmenuReq);
+            PauseMenuManager.RegisterModification([1, 2, 1], side1SubmenuReq);
+            ModificationRequests.Add(side1SubmenuReq);
+
+            PauseMenuManager.RegisterModification([1, 2], sideOptionXHook);
+            ModificationRequests.Add(sideOptionXHook);
         }
         catch (Exception e)
         {
             API.LogError($"Positional settings initialization failed: {e.Message}");
         }
+    }
+
+    private UICustomElementRequestNode CreateSideRandomizerSubmenuElement()
+    {
+        var submenuEnable = new UICustomElementRequestNode(SIDE_SUBMENU_ENABLE_RANDOMIZER,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Randomize Side"),
+                new CustomMessage("Enable or disable side randomization."),
+                (0, 1)));
+
+        submenuEnable.AddHook(new SubMenuSpinnerHookRequest(
+            () => EnabledSideRandomizer ? 1 : 0,
+            val => val == 1 ? ("Enabled", true) : ("Disabled", false),
+            null,
+            () => !OpeningRandomizerSubmenu));
+
+        submenuEnable.AddHook(new FunctionHookRequest((_, _, val) =>
+        {
+            EnabledSideRandomizer = val == 1;
+            return false;
+        }));
+
+        return submenuEnable;
     }
 
     private List<UICustomElementRequestNode> CreateScreenPositionRandomizerSubmenuElements()
@@ -1069,6 +1144,11 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     {
         _skipNextRefreshCheck = true;
 
+        var tm = GameSingletonManager.TrainingManager!;
+
+        if (EnabledSideRandomizer)
+            tm.MenuFunc.ChangeSide(Random.Shared.Next(2) == 1);
+
         if (!EnabledRelativePositionRandomizer && !EnabledScreenPositionRandomizer) return;
 
         if (EnabledRelativePositionRandomizer)
@@ -1256,6 +1336,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         public int ScreenUpperBoundPreset { get; set; } = ScreenPresetOptions.Length - 1;
         public int ScreenLowerBoundUnits { get; set; } = MinScreenPos;
         public int ScreenUpperBoundUnits { get; set; } = MaxScreenPos;
+
+        public bool EnabledSideRandomizer { get; set; }
 
         // positional settings
 
