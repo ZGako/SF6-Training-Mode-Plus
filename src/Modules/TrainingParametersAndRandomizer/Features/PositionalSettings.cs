@@ -32,6 +32,9 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private static readonly Guid RELATIVE_POS_SUBMENU_CUSTOM = Guid.NewGuid();
     private static readonly Guid RELATIVE_POS_SUBMENU_ENABLE_RANDOMIZER = Guid.NewGuid();
+    private static readonly Guid RELATIVE_POS_SUBMENU_RANDOMIZER_MODE = Guid.NewGuid();
+    private static readonly Guid RELATIVE_POS_SUBMENU_UPPER_BOUND = Guid.NewGuid();
+    private static readonly Guid RELATIVE_POS_SUBMENU_LOWER_BOUND = Guid.NewGuid();
 
     private static readonly Guid SCREEN_POS_17 = Guid.NewGuid();
     private static readonly Guid SCREEN_POS_33 = Guid.NewGuid();
@@ -41,6 +44,32 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private static readonly Guid SCREEN_POS_SUBMENU_CUSTOM = Guid.NewGuid();
     private static readonly Guid SCREEN_POS_SUBMENU_ENABLE_RANDOMIZER = Guid.NewGuid();
+    private static readonly Guid SCREEN_POS_SUBMENU_RANDOMIZER_MODE = Guid.NewGuid();
+    private static readonly Guid SCREEN_POS_SUBMENU_UPPER_BOUND = Guid.NewGuid();
+    private static readonly Guid SCREEN_POS_SUBMENU_LOWER_BOUND = Guid.NewGuid();
+
+    private static readonly (string Name, RelativePositionType Type)[] RelativePresetOptions =
+    [
+        ("Point Blank", RelativePositionType.PointBlank),
+        ("Close Range", RelativePositionType.CloseRange),
+        ("Mid Range", RelativePositionType.MidRange),
+        ("Far Range", RelativePositionType.FarRange),
+        ("Throw Tech Distance", RelativePositionType.ThrowTech),
+        ("Roundstart Distance", RelativePositionType.Roundstart),
+        ("Zoning Range", RelativePositionType.ZoningRange),
+        ("Max Range", RelativePositionType.MaxRange)
+    ];
+
+    private static readonly (string Name, ScreenPositionType Type)[] ScreenPresetOptions =
+    [
+        ("Left", ScreenPositionType.Left),
+        ("Left (17%)", ScreenPositionType.Pos17),
+        ("Center-Left (33%)", ScreenPositionType.Pos33),
+        ("Center", ScreenPositionType.Center),
+        ("Center-Right (67%)", ScreenPositionType.Pos67),
+        ("Right (83%)", ScreenPositionType.Pos83),
+        ("Right", ScreenPositionType.Right)
+    ];
 
     private static Config _config = new();
 
@@ -53,9 +82,13 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     private static int _initialRelativePositionValue = 300;
 
     private static bool _refreshCallbackRegistered;
+    private static bool _skipNextRefreshCheck;
 
     private static ScreenPositionType _currentScreenPosition = ScreenPositionType.Center;
     private static RelativePositionType _currentRelativePosition = RelativePositionType.Roundstart;
+
+    private readonly List<UICustomElementRequestNode> _relativeRandomizerDependentNodes = [];
+    private readonly List<UICustomElementRequestNode> _screenRandomizerDependentNodes = [];
 
     private PositionalSettings()
     {
@@ -64,6 +97,26 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             () => _config,
             cfg => _config = cfg,
             PositionalSettingsConfigJsonContext.Default.Config);
+    }
+
+    private bool EnabledRelativePositionRandomizer
+    {
+        get => _config.EnabledRelativePositionRandomizer;
+        set
+        {
+            _config.EnabledRelativePositionRandomizer = value;
+            IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+        }
+    }
+
+    private bool EnabledScreenPositionRandomizer
+    {
+        get => _config.EnabledScreenPositionRandomizer;
+        set
+        {
+            _config.EnabledScreenPositionRandomizer = value;
+            IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+        }
     }
 
     private static ScreenPositionType CurrentScreenPosition
@@ -96,8 +149,16 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private static bool OpeningRandomizerSubmenu { get; set; }
 
-    private static string FormatUnits(int value) =>
-        string.Create(CultureInfo.InvariantCulture, $"{value / 100.0:F2} units");
+    private static string FormatUnits(int value)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{value / 100.0:F2} units");
+    }
+
+    private static string FormatRelativePreset(int index)
+    {
+        var preset = RelativePresetOptions[Math.Clamp(index, 0, RelativePresetOptions.Length - 1)];
+        return $"{preset.Name} ({FormatUnits(preset.Type.Value)})";
+    }
 
     private static int GetMinRelativeDistance()
     {
@@ -109,6 +170,136 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     {
         // TODO: subtract per-character position_vs_relative_distance_offset based on P1 and P2 FighterID
         return DefaultMaxRelativeDistance;
+    }
+
+    private static void SyncRelativeUnitsFromPresets()
+    {
+        var lowerIdx = Math.Clamp(_config.RelativeLowerBoundPreset, 0, RelativePresetOptions.Length - 1);
+        var upperIdx = Math.Clamp(_config.RelativeUpperBoundPreset, lowerIdx, RelativePresetOptions.Length - 1);
+        _config.RelativeLowerBoundPreset = lowerIdx;
+        _config.RelativeUpperBoundPreset = upperIdx;
+        _config.RelativeLowerBoundUnits = RelativePresetOptions[lowerIdx].Type.Value;
+        _config.RelativeUpperBoundUnits = RelativePresetOptions[upperIdx].Type.Value;
+    }
+
+    private static void SyncRelativePresetsFromUnits()
+    {
+        var minDist = GetMinRelativeDistance();
+        var maxDist = GetMaxRelativeDistance();
+        _config.RelativeLowerBoundUnits = Math.Clamp(_config.RelativeLowerBoundUnits, minDist, maxDist);
+        _config.RelativeUpperBoundUnits =
+            Math.Clamp(_config.RelativeUpperBoundUnits, _config.RelativeLowerBoundUnits, maxDist);
+        _config.RelativeLowerBoundPreset = GetClosestRelativePresetIndex(_config.RelativeLowerBoundUnits);
+        _config.RelativeUpperBoundPreset = GetClosestRelativePresetIndex(_config.RelativeUpperBoundUnits);
+    }
+
+    private static int GetClosestRelativePresetIndex(int units)
+    {
+        var bestIndex = 0;
+        var bestDiff = Math.Abs(RelativePresetOptions[0].Type.Value - units);
+
+        for (var i = 1; i < RelativePresetOptions.Length; i++)
+        {
+            var diff = Math.Abs(RelativePresetOptions[i].Type.Value - units);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private static void SyncScreenUnitsFromPresets()
+    {
+        var lowerIdx = Math.Clamp(_config.ScreenLowerBoundPreset, 0, ScreenPresetOptions.Length - 1);
+        var upperIdx = Math.Clamp(_config.ScreenUpperBoundPreset, lowerIdx, ScreenPresetOptions.Length - 1);
+        _config.ScreenLowerBoundPreset = lowerIdx;
+        _config.ScreenUpperBoundPreset = upperIdx;
+        _config.ScreenLowerBoundUnits = ScreenPresetOptions[lowerIdx].Type.Value;
+        _config.ScreenUpperBoundUnits = ScreenPresetOptions[upperIdx].Type.Value;
+    }
+
+    private static void SyncScreenPresetsFromUnits()
+    {
+        _config.ScreenLowerBoundUnits = Math.Clamp(_config.ScreenLowerBoundUnits, MinScreenPos, MaxScreenPos);
+        _config.ScreenUpperBoundUnits =
+            Math.Clamp(_config.ScreenUpperBoundUnits, _config.ScreenLowerBoundUnits, MaxScreenPos);
+        _config.ScreenLowerBoundPreset = GetClosestScreenPresetIndex(_config.ScreenLowerBoundUnits);
+        _config.ScreenUpperBoundPreset = GetClosestScreenPresetIndex(_config.ScreenUpperBoundUnits);
+    }
+
+    private static int GetClosestScreenPresetIndex(int units)
+    {
+        var steps = ScreenPresetOptions.Length - 1;
+        var index = (int)Math.Floor((double)(units - MinScreenPos) / (MaxScreenPos - MinScreenPos) * steps + 0.5);
+        return Math.Clamp(index, 0, steps);
+    }
+
+    private static void SyncSubMenuViewIndices(
+        app.training.BaseParam baseParam,
+        Guid upperBoundGuid,
+        int upperValue,
+        int lowerValue,
+        Guid lowerBoundGuid,
+        int minLimit)
+    {
+        var spinListParam = ManagedProxy<app.training.UIFlowTrainingMenu_SpinList.Param>.Create(baseParam);
+        if (spinListParam == null) return;
+
+        var hasUpper = UIHelpers.TryGetFunctionType(upperBoundGuid, out var upperFuncType);
+        var hasLower = UIHelpers.TryGetFunctionType(lowerBoundGuid, out var lowerFuncType);
+
+        for (var i = 0; i < spinListParam.ViewDataList.Count; i++)
+        {
+            var vd = spinListParam.ViewDataList[i];
+            var funcType = (int)vd.Data.FuncType;
+            if (hasUpper && funcType == upperFuncType)
+                vd.Index = Math.Max(0, upperValue - lowerValue);
+            else if (hasLower && funcType == lowerFuncType)
+                vd.Index = Math.Max(0, lowerValue - minLimit);
+        }
+    }
+
+    private static void SyncRelativeSubMenuViewIndices(app.training.BaseParam baseParam)
+    {
+        if (_config.RelativeRandomizerUsePresets)
+            SyncSubMenuViewIndices(
+                baseParam,
+                RELATIVE_POS_SUBMENU_UPPER_BOUND,
+                _config.RelativeUpperBoundPreset,
+                _config.RelativeLowerBoundPreset,
+                RELATIVE_POS_SUBMENU_LOWER_BOUND,
+                0);
+        else
+            SyncSubMenuViewIndices(
+                baseParam,
+                RELATIVE_POS_SUBMENU_UPPER_BOUND,
+                _config.RelativeUpperBoundUnits,
+                _config.RelativeLowerBoundUnits,
+                RELATIVE_POS_SUBMENU_LOWER_BOUND,
+                GetMinRelativeDistance());
+    }
+
+    private static void SyncScreenSubMenuViewIndices(app.training.BaseParam baseParam)
+    {
+        if (_config.ScreenRandomizerUsePresets)
+            SyncSubMenuViewIndices(
+                baseParam,
+                SCREEN_POS_SUBMENU_UPPER_BOUND,
+                _config.ScreenUpperBoundPreset,
+                _config.ScreenLowerBoundPreset,
+                SCREEN_POS_SUBMENU_LOWER_BOUND,
+                0);
+        else
+            SyncSubMenuViewIndices(
+                baseParam,
+                SCREEN_POS_SUBMENU_UPPER_BOUND,
+                _config.ScreenUpperBoundUnits,
+                _config.ScreenLowerBoundUnits,
+                SCREEN_POS_SUBMENU_LOWER_BOUND,
+                MinScreenPos);
     }
 
     private static void RegisterRefreshCheck()
@@ -132,11 +323,31 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         _relativePosInitialized = false;
         _refreshCallbackRegistered = false;
 
+        if (_skipNextRefreshCheck)
+        {
+            _skipNextRefreshCheck = false;
+            return false;
+        }
+
         return screenPosChanged || relativePosChanged;
     }
 
     public override void Init()
     {
+        if (_config.RelativeRandomizerUsePresets)
+            SyncRelativeUnitsFromPresets();
+        else
+            SyncRelativePresetsFromUnits();
+
+        if (_config.ScreenRandomizerUsePresets)
+            SyncScreenUnitsFromPresets();
+        else
+            SyncScreenPresetsFromUnits();
+
+        IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer || _config.EnabledScreenPositionRandomizer;
+        _relativeRandomizerDependentNodes.Clear();
+        _screenRandomizerDependentNodes.Clear();
+
         var relativePosSpinner = new UICustomElementRequestNode(RELATIVE_POSITION_SPINNER,
             new SpinnerInitializer(
                 new CustomMessage("Relative Position"),
@@ -237,11 +448,14 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         var leftScreenInputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
 
         var centerScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest([(-1, CreateScreenPositionRandomizerSubmenuElement())]);
+            new PauseMenuAppendElementsRequest(
+                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
         var rightScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest([(-1, CreateScreenPositionRandomizerSubmenuElement())]);
+            new PauseMenuAppendElementsRequest(
+                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
         var leftScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest([(-1, CreateScreenPositionRandomizerSubmenuElement())]);
+            new PauseMenuAppendElementsRequest(
+                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
 
         try
         {
@@ -288,7 +502,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         }
     }
 
-    private static UICustomElementRequestNode CreateScreenPositionRandomizerSubmenuElement()
+    private List<UICustomElementRequestNode> CreateScreenPositionRandomizerSubmenuElements()
     {
         var submenuEnable = new UICustomElementRequestNode(SCREEN_POS_SUBMENU_ENABLE_RANDOMIZER,
             new SubMenuSpinnerInitializer(
@@ -297,21 +511,248 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 (0, 1)));
 
         submenuEnable.AddHook(new SubMenuSpinnerHookRequest(
-            () => _config.EnabledScreenPositionRandomizer ? 1 : 0,
+            () => EnabledScreenPositionRandomizer ? 1 : 0,
             val => val == 1 ? ("Enabled", true) : ("Disabled", false),
             null,
             () => !OpeningRandomizerSubmenu));
 
-        submenuEnable.AddHook(new FunctionHookRequest((_, _, val) =>
+        var submenuMode = new UICustomElementRequestNode(SCREEN_POS_SUBMENU_RANDOMIZER_MODE,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Randomizer Mode"),
+                new CustomMessage("Switch between preset positions and units for screen position randomization."),
+                (0, 1),
+                EnabledScreenPositionRandomizer));
+
+        submenuMode.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.ScreenRandomizerUsePresets ? 0 : 1,
+            val => val == 0 ? ("Preset", false) : ("Units", false),
+            null,
+            () => !OpeningRandomizerSubmenu));
+
+        submenuMode.AddHook(new FunctionHookRequest((baseParam, _, val) =>
         {
-            _config.EnabledScreenPositionRandomizer = val == 1;
+            _config.ScreenRandomizerUsePresets = val == 0;
+            SyncScreenSubMenuViewIndices(baseParam);
+            (baseParam as IObject)?.Call("UpdateList()");
             return false;
         }));
 
-        return submenuEnable;
+        var submenuUpperBound = new UICustomElementRequestNode(SCREEN_POS_SUBMENU_UPPER_BOUND,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Upper Bound"),
+                new CustomMessage("Set the upper bound for screen position randomization."),
+                (MinScreenPos, MaxScreenPos),
+                EnabledScreenPositionRandomizer));
+
+        submenuUpperBound.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.ScreenRandomizerUsePresets ? _config.ScreenUpperBoundPreset : _config.ScreenUpperBoundUnits,
+            val => _config.ScreenRandomizerUsePresets
+                ? (ScreenPresetOptions[Math.Clamp(val, 0, ScreenPresetOptions.Length - 1)].Name, false)
+                : (FormatUnits(val), false),
+            () => _config.ScreenRandomizerUsePresets
+                ? (_config.ScreenLowerBoundPreset, ScreenPresetOptions.Length - 1)
+                : (_config.ScreenLowerBoundUnits, MaxScreenPos),
+            () => !OpeningRandomizerSubmenu));
+
+        submenuUpperBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            if (_config.ScreenRandomizerUsePresets)
+            {
+                _config.ScreenUpperBoundPreset = Math.Clamp(val, 0, ScreenPresetOptions.Length - 1);
+                SyncScreenUnitsFromPresets();
+            }
+            else
+            {
+                _config.ScreenUpperBoundUnits = val;
+                SyncScreenPresetsFromUnits();
+            }
+
+            SyncScreenSubMenuViewIndices(baseParam);
+            return false;
+        }));
+
+        var submenuLowerBound = new UICustomElementRequestNode(SCREEN_POS_SUBMENU_LOWER_BOUND,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Lower Bound"),
+                new CustomMessage("Set the lower bound for screen position randomization."),
+                (MinScreenPos, MaxScreenPos),
+                EnabledScreenPositionRandomizer));
+
+        submenuLowerBound.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.ScreenRandomizerUsePresets ? _config.ScreenLowerBoundPreset : _config.ScreenLowerBoundUnits,
+            val => _config.ScreenRandomizerUsePresets
+                ? (ScreenPresetOptions[Math.Clamp(val, 0, ScreenPresetOptions.Length - 1)].Name, false)
+                : (FormatUnits(val), false),
+            () => _config.ScreenRandomizerUsePresets
+                ? (0, _config.ScreenUpperBoundPreset)
+                : (MinScreenPos, _config.ScreenUpperBoundUnits),
+            () => !OpeningRandomizerSubmenu));
+
+        submenuLowerBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            if (_config.ScreenRandomizerUsePresets)
+            {
+                _config.ScreenLowerBoundPreset = Math.Clamp(val, 0, ScreenPresetOptions.Length - 1);
+                SyncScreenUnitsFromPresets();
+            }
+            else
+            {
+                _config.ScreenLowerBoundUnits = val;
+                SyncScreenPresetsFromUnits();
+            }
+
+            SyncScreenSubMenuViewIndices(baseParam);
+            return false;
+        }));
+
+        _screenRandomizerDependentNodes.Add(submenuMode);
+        _screenRandomizerDependentNodes.Add(submenuUpperBound);
+        _screenRandomizerDependentNodes.Add(submenuLowerBound);
+
+        submenuEnable.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            var enabled = val == 1;
+            EnabledScreenPositionRandomizer = enabled;
+            foreach (var node in _screenRandomizerDependentNodes)
+                node.GetBuiltElement().IsEnabled = enabled;
+
+            SyncScreenSubMenuViewIndices(baseParam);
+            (baseParam as IObject)?.Call("UpdateList()");
+
+            return false;
+        }));
+
+        return [submenuEnable, submenuMode, submenuUpperBound, submenuLowerBound];
     }
 
-    private static List<(int, UICustomElementRequestNode)> CreateScreenPositionSpinnerItems()
+    private List<UICustomElementRequestNode> CreateRelativePositionRandomizerSubmenuElements()
+    {
+        var submenuEnable = new UICustomElementRequestNode(RELATIVE_POS_SUBMENU_ENABLE_RANDOMIZER,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Enable Randomizer"),
+                new CustomMessage("Enable or disable relative position randomization."),
+                (0, 1)));
+
+        submenuEnable.AddHook(new SubMenuSpinnerHookRequest(
+            () => EnabledRelativePositionRandomizer ? 1 : 0,
+            val => val == 1 ? ("Enabled", true) : ("Disabled", false),
+            null,
+            () => !OpeningRandomizerSubmenu));
+
+        var submenuMode = new UICustomElementRequestNode(RELATIVE_POS_SUBMENU_RANDOMIZER_MODE,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Randomizer Mode"),
+                new CustomMessage("Switch between preset distances and units for relative position randomization."),
+                (0, 1),
+                EnabledRelativePositionRandomizer));
+
+        submenuMode.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.RelativeRandomizerUsePresets ? 0 : 1,
+            val => val == 0 ? ("Preset", false) : ("Units", false),
+            null,
+            () => !OpeningRandomizerSubmenu));
+
+        submenuMode.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            _config.RelativeRandomizerUsePresets = val == 0;
+            SyncRelativeSubMenuViewIndices(baseParam);
+            (baseParam as IObject)?.Call("UpdateList()");
+            return false;
+        }));
+
+        var submenuUpperBound = new UICustomElementRequestNode(RELATIVE_POS_SUBMENU_UPPER_BOUND,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Upper Bound"),
+                new CustomMessage("Set the upper bound for relative position randomization."),
+                (DefaultMinRelativeDistance, DefaultMaxRelativeDistance),
+                EnabledRelativePositionRandomizer));
+
+        submenuUpperBound.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.RelativeRandomizerUsePresets
+                ? _config.RelativeUpperBoundPreset
+                : _config.RelativeUpperBoundUnits,
+            val => _config.RelativeRandomizerUsePresets
+                ? (FormatRelativePreset(val), false)
+                : (FormatUnits(val), false),
+            () => _config.RelativeRandomizerUsePresets
+                ? (_config.RelativeLowerBoundPreset, RelativePresetOptions.Length - 1)
+                : (_config.RelativeLowerBoundUnits, GetMaxRelativeDistance()),
+            () => !OpeningRandomizerSubmenu));
+
+        submenuUpperBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            if (_config.RelativeRandomizerUsePresets)
+            {
+                _config.RelativeUpperBoundPreset = Math.Clamp(val, 0, RelativePresetOptions.Length - 1);
+                SyncRelativeUnitsFromPresets();
+            }
+            else
+            {
+                _config.RelativeUpperBoundUnits = val;
+                SyncRelativePresetsFromUnits();
+            }
+
+            SyncRelativeSubMenuViewIndices(baseParam);
+            return false;
+        }));
+
+        var submenuLowerBound = new UICustomElementRequestNode(RELATIVE_POS_SUBMENU_LOWER_BOUND,
+            new SubMenuSpinnerInitializer(
+                new CustomMessage("Lower Bound"),
+                new CustomMessage("Set the lower bound for relative position randomization."),
+                (DefaultMinRelativeDistance, DefaultMaxRelativeDistance),
+                EnabledRelativePositionRandomizer));
+
+        submenuLowerBound.AddHook(new SubMenuSpinnerHookRequest(
+            () => _config.RelativeRandomizerUsePresets
+                ? _config.RelativeLowerBoundPreset
+                : _config.RelativeLowerBoundUnits,
+            val => _config.RelativeRandomizerUsePresets
+                ? (FormatRelativePreset(val), false)
+                : (FormatUnits(val), false),
+            () => _config.RelativeRandomizerUsePresets
+                ? (0, _config.RelativeUpperBoundPreset)
+                : (GetMinRelativeDistance(), _config.RelativeUpperBoundUnits),
+            () => !OpeningRandomizerSubmenu));
+
+        submenuLowerBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            if (_config.RelativeRandomizerUsePresets)
+            {
+                _config.RelativeLowerBoundPreset = Math.Clamp(val, 0, RelativePresetOptions.Length - 1);
+                SyncRelativeUnitsFromPresets();
+            }
+            else
+            {
+                _config.RelativeLowerBoundUnits = val;
+                SyncRelativePresetsFromUnits();
+            }
+
+            SyncRelativeSubMenuViewIndices(baseParam);
+            return false;
+        }));
+
+        _relativeRandomizerDependentNodes.Add(submenuMode);
+        _relativeRandomizerDependentNodes.Add(submenuUpperBound);
+        _relativeRandomizerDependentNodes.Add(submenuLowerBound);
+
+        submenuEnable.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        {
+            var enabled = val == 1;
+            EnabledRelativePositionRandomizer = enabled;
+            foreach (var node in _relativeRandomizerDependentNodes)
+                node.GetBuiltElement().IsEnabled = enabled;
+
+            SyncRelativeSubMenuViewIndices(baseParam);
+            (baseParam as IObject)?.Call("UpdateList()");
+
+            return false;
+        }));
+
+        return [submenuEnable, submenuMode, submenuUpperBound, submenuLowerBound];
+    }
+
+    private List<(int, UICustomElementRequestNode)> CreateScreenPositionSpinnerItems()
     {
         var newElements = new List<(int, UICustomElementRequestNode)>();
 
@@ -380,16 +821,14 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
         foreach (var (_, element) in newElements)
         {
-            var submenuEnable = CreateScreenPositionRandomizerSubmenuElement();
-
             element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
-            element.AddChildren([submenuEnable]);
+            element.AddChildren([.. CreateScreenPositionRandomizerSubmenuElements()]);
         }
 
         return newElements;
     }
 
-    private static List<UICustomElementRequestNode> CreateRelativeSpinnerItems()
+    private List<UICustomElementRequestNode> CreateRelativeSpinnerItems()
     {
         var newElements = new List<UICustomElementRequestNode>();
 
@@ -461,30 +900,9 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         // construct all the in common submenus
         foreach (var element in newElements)
         {
-            // randomizer elements (shared)
-            // TODO: finish adding these (the other options)
-            var submenuEnable = new UICustomElementRequestNode(RELATIVE_POS_SUBMENU_ENABLE_RANDOMIZER,
-                new SubMenuSpinnerInitializer(
-                    new CustomMessage("Enable Randomizer"),
-                    new CustomMessage("Set the custom relative distance in units."),
-                    (0, 1)));
-
-            submenuEnable.AddHook(new SubMenuSpinnerHookRequest(
-                () => _config.EnabledRelativePositionRandomizer ? 1 : 0,
-                val => val == 1 ? ("Enabled", true) : ("Disabled", false),
-                null,
-                () => !OpeningRandomizerSubmenu));
-
-            submenuEnable.AddHook(new FunctionHookRequest((_, _, val) =>
-            {
-                _config.EnabledRelativePositionRandomizer = val == 1;
-                return false;
-            }));
-
             // input guide thing
             element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
-
-            element.AddChildren([submenuEnable]);
+            element.AddChildren([.. CreateRelativePositionRandomizerSubmenuElements()]);
         }
 
         return newElements;
@@ -649,7 +1067,48 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     public override void Randomize()
     {
-        API.LogInfo("Do nothing here");
+        _skipNextRefreshCheck = true;
+
+        if (!EnabledRelativePositionRandomizer && !EnabledScreenPositionRandomizer) return;
+
+        if (EnabledRelativePositionRandomizer)
+        {
+            if (_config.RelativeRandomizerUsePresets)
+            {
+                var lower = Math.Clamp(_config.RelativeLowerBoundPreset, 0, RelativePresetOptions.Length - 1);
+                var upper = Math.Clamp(_config.RelativeUpperBoundPreset, lower, RelativePresetOptions.Length - 1);
+                var index = Random.Shared.Next(lower, upper + 1);
+                _currentRelativePosition = RelativePresetOptions[index].Type;
+            }
+            else
+            {
+                var lower = Math.Clamp(_config.RelativeLowerBoundUnits, GetMinRelativeDistance(),
+                    GetMaxRelativeDistance());
+                var upper = Math.Clamp(_config.RelativeUpperBoundUnits, lower, GetMaxRelativeDistance());
+                _config.CustomRelativePosValue = Random.Shared.Next(lower, upper + 1);
+                _currentRelativePosition = RelativePositionType.CustomRange;
+            }
+        }
+
+        if (EnabledScreenPositionRandomizer)
+        {
+            if (_config.ScreenRandomizerUsePresets)
+            {
+                var lower = Math.Clamp(_config.ScreenLowerBoundPreset, 0, ScreenPresetOptions.Length - 1);
+                var upper = Math.Clamp(_config.ScreenUpperBoundPreset, lower, ScreenPresetOptions.Length - 1);
+                var index = Random.Shared.Next(lower, upper + 1);
+                _currentScreenPosition = ScreenPresetOptions[index].Type;
+            }
+            else
+            {
+                var lower = Math.Clamp(_config.ScreenLowerBoundUnits, MinScreenPos, MaxScreenPos);
+                var upper = Math.Clamp(_config.ScreenUpperBoundUnits, lower, MaxScreenPos);
+                _config.CustomScreenPosition = Random.Shared.Next(lower, upper + 1);
+                _currentScreenPosition = ScreenPositionType.CustomPosition;
+            }
+        }
+
+        SetPositioningData();
     }
 
     public readonly record struct RelativePositionType
@@ -785,8 +1244,18 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     {
         // randomizer stuff
         public bool EnabledRelativePositionRandomizer { get; set; }
+        public bool RelativeRandomizerUsePresets { get; set; } = true;
+        public int RelativeLowerBoundPreset { get; set; }
+        public int RelativeUpperBoundPreset { get; set; } = RelativePresetOptions.Length - 1;
+        public int RelativeLowerBoundUnits { get; set; } = DefaultMinRelativeDistance;
+        public int RelativeUpperBoundUnits { get; set; } = DefaultMaxRelativeDistance;
 
         public bool EnabledScreenPositionRandomizer { get; set; }
+        public bool ScreenRandomizerUsePresets { get; set; } = true;
+        public int ScreenLowerBoundPreset { get; set; }
+        public int ScreenUpperBoundPreset { get; set; } = ScreenPresetOptions.Length - 1;
+        public int ScreenLowerBoundUnits { get; set; } = MinScreenPos;
+        public int ScreenUpperBoundUnits { get; set; } = MaxScreenPos;
 
         // positional settings
 

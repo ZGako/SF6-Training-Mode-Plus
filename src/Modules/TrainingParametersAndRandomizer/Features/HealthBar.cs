@@ -40,7 +40,6 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
         {
             _config.EnabledP1 = value;
             IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
-            field = value;
         }
     }
 
@@ -51,7 +50,6 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
         {
             _config.EnabledP2 = value;
             IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
-            field = value;
         }
     }
 
@@ -146,7 +144,7 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
                     break;
             }
 
-            (baseParam as IObject).Call("UpdateList()");
+            (baseParam as IObject)?.Call("UpdateList()");
 
             return false;
         }));
@@ -228,7 +226,7 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
                     break;
             }
 
-            (baseParam as IObject).Call("UpdateList()");
+            (baseParam as IObject)?.Call("UpdateList()");
 
             return false;
         }));
