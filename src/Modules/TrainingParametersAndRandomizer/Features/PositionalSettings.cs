@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -289,7 +289,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 MinScreenPos);
     }
 
-    [MethodHook(typeof(app.training.UITrainingMenu), "StartMenu(System.Int32, app.training.BaseParam)", MethodHookType.Post)]
+    [MethodHook(typeof(app.training.UITrainingMenu), "StartMenu(System.Int32, app.training.BaseParam)",
+        MethodHookType.Post)]
     public static void OnStartMenu(ref ulong _)
     {
         GetCurrentScreenPosition(null!);
@@ -313,6 +314,66 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         if (screenPosChanged || relativePosChanged)
             GameSingletonManager.TrainingManager?.MenuFunc.RestartGame(false);
 
+        return PreHookResult.Continue;
+    }
+
+    // set when the training "refresh" shortcut is used, consumed by the next RestartGame call
+    private static bool _shortcutResetPending;
+
+    // the latest (layout, side flip) used with the shortcut + a direction
+    private static (app.EConfigInitLayout StartLocation, bool IsSideFlip)? _lastShortcutUse;
+
+    [MethodHook(typeof(app.training.tf_ShortCutSetting), "_UpdatePositionReset()", MethodHookType.Pre)]
+    public static PreHookResult OnShortcutUpdatePositionReset(Span<ulong> _)
+    {
+        _shortcutResetPending = true;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.training.tf_SelectMenu.FuncData), "RestartGame(System.Boolean)", MethodHookType.Pre)]
+    public static PreHookResult OnRestartGame(Span<ulong> _)
+    {
+        // consume the flag
+        if (!_shortcutResetPending) return PreHookResult.Continue;
+        _shortcutResetPending = false;
+
+        var tm = GameSingletonManager.TrainingManager;
+        if (tm == null) return PreHookResult.Continue;
+
+        var selectMenu = tm._tData.SelectMenu;
+        var startLocation = selectMenu.StartLocation;
+
+        ScreenPositionType screenPos;
+        switch (startLocation)
+        {
+            case app.EConfigInitLayout.CENTER:
+                screenPos = ScreenPositionType.Center;
+                break;
+            case app.EConfigInitLayout.LEFT:
+                screenPos = ScreenPositionType.Left;
+                break;
+            case app.EConfigInitLayout.RIGHT:
+                screenPos = ScreenPositionType.Right;
+                break;
+            default:
+                // shortcut pressed on its own: the game keeps the menu settings, nothing to do
+                _lastShortcutUse = null;
+                return PreHookResult.Continue;
+        }
+
+        var current = (startLocation, (bool)selectMenu.Is_Side_Flip);
+
+        if (_lastShortcutUse == current)
+        {
+            // same as last time: let the game's call through, but resync our state like on init
+            GetCurrentScreenPosition(null!);
+            GetCurrentRelativePosition(null!);
+            return PreHookResult.Continue;
+        }
+
+        _lastShortcutUse = current;
+        CurrentScreenPosition = screenPos;
+        SetPositioningData();
         return PreHookResult.Continue;
     }
 
@@ -954,7 +1015,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         var tm = GameSingletonManager.TrainingManager!;
 
         var positionSetting = tm._tData.SelectMenu.StartLocation;
-
         switch (positionSetting)
         {
             case app.EConfigInitLayout.CENTER:
@@ -1154,13 +1214,12 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         SetPositioningData();
     }
 
+
     public readonly record struct RelativePositionType
     {
-        private readonly int _offsetValue;
-
         private RelativePositionType(int offsetValue, Guid guidValue)
         {
-            _offsetValue = offsetValue;
+            Value = offsetValue;
             GuidValue = guidValue;
         }
 
@@ -1170,7 +1229,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             {
                 if (GuidValue == RELATIVE_POS_CUSTOM) return _config.CustomRelativePosValue;
                 if (GuidValue == RELATIVE_POS_MAX_RANGE) return GetMaxRelativeDistance();
-                return GetMinRelativeDistance() + _offsetValue;
+                return GetMinRelativeDistance() + field;
             }
         }
 
@@ -1216,23 +1275,21 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         private readonly app.training.TrainingFuncType? _funcType;
         private readonly Guid _guidValue;
 
-        private readonly int _value;
-
         private ScreenPositionType(int value, app.training.TrainingFuncType funcType)
         {
-            _value = value;
+            Value = value;
             _funcType = funcType;
             _guidValue = Guid.Empty;
         }
 
         private ScreenPositionType(int value, Guid guidValue)
         {
-            _value = value;
+            Value = value;
             _funcType = null;
             _guidValue = guidValue;
         }
 
-        public int Value => _guidValue == SCREEN_POS_CUSTOM ? _config.CustomScreenPosition : _value;
+        public int Value => _guidValue == SCREEN_POS_CUSTOM ? _config.CustomScreenPosition : field;
 
         public TrainingFuncOrGuid GuidValue =>
             _funcType.HasValue ? _funcType.Value : _guidValue;
