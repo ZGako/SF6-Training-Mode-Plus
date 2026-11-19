@@ -1,4 +1,5 @@
 using SF6_Plugin_Core.UI.InjectionShared;
+using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 
 namespace SF6_TMP.Modules;
@@ -6,19 +7,13 @@ namespace SF6_TMP.Modules;
 
 public class TestingRefactor : ITrainingModePlusModule
 {
-    private static readonly Guid TEST_ROW_BUTTON = Guid.NewGuid();
-    private static readonly Guid TOGGLE_OTHER_BUTTON = Guid.NewGuid();
-    private static readonly Guid TEST_TAB = Guid.NewGuid();
-
-    private static readonly Guid AA_SPINNER = Guid.NewGuid();
-    private static readonly Guid TEST_OPTION_BUTTON2 = Guid.NewGuid();
-    private readonly List<IUIModificationRequest> _optionsModificationRequests = [];
-
     private readonly List<IUIModificationRequest> _pauseModificationRequests = [];
 
     private bool _buttonVisible = true;
 
     private PauseMenuAppendElementsRequest? _randomizerButtonAppendRequest;
+
+    private Guid? _shortcutGuid;
 
     private TestingRefactor()
     {
@@ -28,12 +23,28 @@ public class TestingRefactor : ITrainingModePlusModule
 
     public void Init()
     {
+        _shortcutGuid = ShortcutManager.RegisterShortcut(
+            new ShortcutManager.CustomShortcutNode
+            {
+                ItemMessage = CustomMessage.FromKey("RandomizerButtonTitle"),
+                GuideMessage = CustomMessage.FromKey("RandomizerButtonDescription"),
+                IsKeyInput = true
+                // ShortcutType = existing type → adds a duplicate entry instead of a new type
+            },
+            () => { }, () => { }, () => { },
+            liveNode =>
+            {
+                /* save liveNode.Button / Key / ... to your config */
+                API.LogInfo($"saving node values {liveNode}");
+            });
     }
 
     public void Unload()
     {
         try
         {
+            if (_shortcutGuid != null)
+                ShortcutManager.UnregisterShortcut(_shortcutGuid.Value);
             foreach (var request in _pauseModificationRequests) PauseMenuManager.UnregisterModification(request);
         }
         catch (Exception ex)

@@ -39,6 +39,7 @@ public static class TrainingModePlus
         LocalizationManager.LoadTranslations(LocalizationFilePath, "TrainingModePlus");
 
         Modules.Add(GameSpeedPlus.Instance);
+        // Modules.Add(TestingRefactor.Instance);
         Modules.Add(TrainingParametersAndRandomizer.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
