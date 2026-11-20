@@ -93,7 +93,9 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
             () =>
             {
                 RandomizeFeatures();
-                GameSingletonManager.TrainingManager!.IsReqRefresh = true;
+
+                GameSingletonManager.TrainingManager!.MenuFunc.RestartGame(false);
+                GameSingletonManager.TrainingManager.Apply(true);
             }, () => { }, () => { },
             liveNode =>
             {
