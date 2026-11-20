@@ -224,71 +224,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         return Math.Clamp(index, 0, steps);
     }
 
-    private static void SyncSubMenuViewIndices(
-        app.training.BaseParam baseParam,
-        Guid upperBoundGuid,
-        int upperValue,
-        int lowerValue,
-        Guid lowerBoundGuid,
-        int minLimit)
-    {
-        var spinListParam = ManagedProxy<app.training.UIFlowTrainingMenu_SpinList.Param>.Create(baseParam);
-        if (spinListParam == null) return;
-
-        var hasUpper = UIHelpers.TryGetFunctionType(upperBoundGuid, out var upperFuncType);
-        var hasLower = UIHelpers.TryGetFunctionType(lowerBoundGuid, out var lowerFuncType);
-
-        for (var i = 0; i < spinListParam.ViewDataList.Count; i++)
-        {
-            var vd = spinListParam.ViewDataList[i];
-            var funcType = (int)vd.Data.FuncType;
-            if (hasUpper && funcType == upperFuncType)
-                vd.Index = Math.Max(0, upperValue - lowerValue);
-            else if (hasLower && funcType == lowerFuncType)
-                vd.Index = Math.Max(0, lowerValue - minLimit);
-        }
-    }
-
-    private static void SyncRelativeSubMenuViewIndices(app.training.BaseParam baseParam)
-    {
-        if (_config.RelativeRandomizerUsePresets)
-            SyncSubMenuViewIndices(
-                baseParam,
-                RELATIVE_POS_SUBMENU_UPPER_BOUND,
-                _config.RelativeUpperBoundPreset,
-                _config.RelativeLowerBoundPreset,
-                RELATIVE_POS_SUBMENU_LOWER_BOUND,
-                0);
-        else
-            SyncSubMenuViewIndices(
-                baseParam,
-                RELATIVE_POS_SUBMENU_UPPER_BOUND,
-                _config.RelativeUpperBoundUnits,
-                _config.RelativeLowerBoundUnits,
-                RELATIVE_POS_SUBMENU_LOWER_BOUND,
-                GetMinRelativeDistance());
-    }
-
-    private static void SyncScreenSubMenuViewIndices(app.training.BaseParam baseParam)
-    {
-        if (_config.ScreenRandomizerUsePresets)
-            SyncSubMenuViewIndices(
-                baseParam,
-                SCREEN_POS_SUBMENU_UPPER_BOUND,
-                _config.ScreenUpperBoundPreset,
-                _config.ScreenLowerBoundPreset,
-                SCREEN_POS_SUBMENU_LOWER_BOUND,
-                0);
-        else
-            SyncSubMenuViewIndices(
-                baseParam,
-                SCREEN_POS_SUBMENU_UPPER_BOUND,
-                _config.ScreenUpperBoundUnits,
-                _config.ScreenLowerBoundUnits,
-                SCREEN_POS_SUBMENU_LOWER_BOUND,
-                MinScreenPos);
-    }
-
     [MethodHook(typeof(app.training.UITrainingMenu), "StartMenu(System.Int32, app.training.BaseParam)",
         MethodHookType.Post)]
     public static void OnStartMenu(ref ulong _)
@@ -633,7 +568,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         submenuMode.AddHook(new FunctionHookRequest((baseParam, _, val) =>
         {
             _config.ScreenRandomizerUsePresets = val == 0;
-            SyncScreenSubMenuViewIndices(baseParam);
             (baseParam as IObject)?.Call("UpdateList()");
             return false;
         }));
@@ -655,7 +589,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 : (_config.ScreenLowerBoundUnits, MaxScreenPos),
             () => !OpeningRandomizerSubmenu));
 
-        submenuUpperBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        submenuUpperBound.AddHook(new FunctionHookRequest((_, _, val) =>
         {
             if (_config.ScreenRandomizerUsePresets)
             {
@@ -668,7 +602,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 SyncScreenPresetsFromUnits();
             }
 
-            SyncScreenSubMenuViewIndices(baseParam);
             return false;
         }));
 
@@ -689,7 +622,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 : (MinScreenPos, _config.ScreenUpperBoundUnits),
             () => !OpeningRandomizerSubmenu));
 
-        submenuLowerBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        submenuLowerBound.AddHook(new FunctionHookRequest((_, _, val) =>
         {
             if (_config.ScreenRandomizerUsePresets)
             {
@@ -702,7 +635,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 SyncScreenPresetsFromUnits();
             }
 
-            SyncScreenSubMenuViewIndices(baseParam);
             return false;
         }));
 
@@ -717,7 +649,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             foreach (var node in _screenRandomizerDependentNodes)
                 node.GetBuiltElement().IsEnabled = enabled;
 
-            SyncScreenSubMenuViewIndices(baseParam);
             (baseParam as IObject)?.Call("UpdateList()");
 
             return false;
@@ -756,7 +687,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         submenuMode.AddHook(new FunctionHookRequest((baseParam, _, val) =>
         {
             _config.RelativeRandomizerUsePresets = val == 0;
-            SyncRelativeSubMenuViewIndices(baseParam);
             (baseParam as IObject)?.Call("UpdateList()");
             return false;
         }));
@@ -780,7 +710,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 : (_config.RelativeLowerBoundUnits, GetMaxRelativeDistance()),
             () => !OpeningRandomizerSubmenu));
 
-        submenuUpperBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        submenuUpperBound.AddHook(new FunctionHookRequest((_, _, val) =>
         {
             if (_config.RelativeRandomizerUsePresets)
             {
@@ -793,7 +723,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 SyncRelativePresetsFromUnits();
             }
 
-            SyncRelativeSubMenuViewIndices(baseParam);
             return false;
         }));
 
@@ -816,7 +745,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 : (GetMinRelativeDistance(), _config.RelativeUpperBoundUnits),
             () => !OpeningRandomizerSubmenu));
 
-        submenuLowerBound.AddHook(new FunctionHookRequest((baseParam, _, val) =>
+        submenuLowerBound.AddHook(new FunctionHookRequest((_, _, val) =>
         {
             if (_config.RelativeRandomizerUsePresets)
             {
@@ -829,7 +758,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 SyncRelativePresetsFromUnits();
             }
 
-            SyncRelativeSubMenuViewIndices(baseParam);
             return false;
         }));
 
@@ -844,7 +772,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             foreach (var node in _relativeRandomizerDependentNodes)
                 node.GetBuiltElement().IsEnabled = enabled;
 
-            SyncRelativeSubMenuViewIndices(baseParam);
             (baseParam as IObject)?.Call("UpdateList()");
 
             return false;
