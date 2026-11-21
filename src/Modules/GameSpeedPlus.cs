@@ -6,6 +6,7 @@ using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.Hooks;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Requests;
 
 namespace SF6_TMP.Modules;
@@ -239,7 +240,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
         return defaultGameSpeed;
     }
 
-    private static bool ResetToDefaultGameSpeed(app.training.BaseParam baseParam,
+    private static TrainingFunctionHooks.FunctionResult ResetToDefaultGameSpeed(app.training.BaseParam baseParam,
         app.training.UIFlowTrainingMenu.Param.ViewData viewData, int rowIndex)
     {
         // we first want to find the index of the default game speed
