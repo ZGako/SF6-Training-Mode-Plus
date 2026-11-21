@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SF6_Plugin_Core.Memory;
@@ -13,10 +14,22 @@ namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Features;
 
 public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 {
-    private const int MinBound = -7;
-    private const int MaxBound = 6;
+    private const int PointsPerStock = 10000;
+    private const int PointsPerPreciseStep = 1000;
+    private const int MaxStocks = 6;
+    private const int MaxPreciseSteps = MaxStocks * 10;
+    private const int MaxPoints = MaxStocks * PointsPerStock;
+
+    // Encoded values use [-1] as Burnout 0 ("-0"), [-(N + 1)] as Burnout N, and [0..N] as Normal 0..N.
+    private const int MinRawBound = -(MaxPoints + 1);
+    private const int MaxRawBound = MaxPoints;
     private const int DefaultLowerBound = 0;
-    private const int DefaultUpperBound = 6;
+    private const int DefaultUpperBound = MaxPoints;
+
+    private const int MinStockBound = -(MaxStocks + 1);
+    private const int MaxStockBound = MaxStocks;
+    private const int MinPreciseBound = -(MaxPreciseSteps + 1);
+    private const int MaxPreciseBound = MaxPreciseSteps;
 
     private static readonly List<int> PathToDriveGaugeSliderP1 = [5, 4];
     private static readonly List<int> PathToDriveGaugeSliderP2 = [5, 5];
@@ -60,26 +73,52 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         }
     }
 
-    // Internal range [-7..-1] maps to Burnout stocks [6..0] (-1 acts as "-0"), and [0..6] maps to normal stocks [0..6].
-    private static (bool IsBurnout, int Stock) DecodeValue(int value)
+    private static bool IsPointMode(int playerIndex)
     {
-        return value < 0
-            ? (true, -(value + 1))
-            : (false, value);
+        var tm = GameSingletonManager.TrainingManager;
+        if (tm == null) return false;
+        return tm._tData.ParameterSetting.PlayerDatas[playerIndex].DG_Type == app.training.TM_DG_GAUGE_TYPE.POINT;
     }
 
-    private static string FormatValue(int value)
+    private static (bool IsBurnout, int Magnitude) DecodeEncodedValue(int encoded)
     {
-        var (isBurnout, stock) = DecodeValue(value);
-        return isBurnout ? $"{stock} (Burnout)" : $"{stock}";
+        return encoded < 0
+            ? (true, -(encoded + 1))
+            : (false, encoded);
+    }
+
+    private static int EncodeValue(bool isBurnout, int magnitude)
+    {
+        return isBurnout ? -(magnitude + 1) : magnitude;
+    }
+
+    private static int RawToStep(int rawValue, int stepSize)
+    {
+        var (isBurnout, points) = DecodeEncodedValue(rawValue);
+        return EncodeValue(isBurnout, points / stepSize);
+    }
+
+    private static int StepToRaw(int stepValue, int stepSize)
+    {
+        var (isBurnout, steps) = DecodeEncodedValue(stepValue);
+        return EncodeValue(isBurnout, steps * stepSize);
+    }
+
+    private static string FormatValue(int stepValue, bool isPointMode)
+    {
+        var (isBurnout, magnitude) = DecodeEncodedValue(stepValue);
+        var formatted = isPointMode
+            ? string.Create(CultureInfo.InvariantCulture, $"{magnitude / 10.0:F1}")
+            : $"{magnitude}";
+        return isBurnout ? $"{formatted} (Burnout)" : formatted;
     }
 
     public override void Init()
     {
-        _config.LowerBoundP1 = Math.Clamp(_config.LowerBoundP1, MinBound, MaxBound);
-        _config.UpperBoundP1 = Math.Clamp(_config.UpperBoundP1, _config.LowerBoundP1, MaxBound);
-        _config.LowerBoundP2 = Math.Clamp(_config.LowerBoundP2, MinBound, MaxBound);
-        _config.UpperBoundP2 = Math.Clamp(_config.UpperBoundP2, _config.LowerBoundP2, MaxBound);
+        _config.LowerBoundP1 = Math.Clamp(_config.LowerBoundP1, MinRawBound, MaxRawBound);
+        _config.UpperBoundP1 = Math.Clamp(_config.UpperBoundP1, _config.LowerBoundP1, MaxRawBound);
+        _config.LowerBoundP2 = Math.Clamp(_config.LowerBoundP2, MinRawBound, MaxRawBound);
+        _config.UpperBoundP2 = Math.Clamp(_config.UpperBoundP2, _config.LowerBoundP2, MaxRawBound);
 
         IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
 
@@ -219,8 +258,6 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
     private static FunctionHookRequest CreateDriveGaugeFunctionHook(int playerIndex)
     {
-        var playerLabel = playerIndex == 0 ? "P1" : "P2";
-
         return new FunctionHookRequest((_, viewData, _) =>
         {
             var tm = GameSingletonManager.TrainingManager!;
@@ -229,12 +266,12 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
             if (playerData.DG_Type != app.training.TM_DG_GAUGE_TYPE.POINT)
             {
-                paramFunc.SetDGDetailPoint(playerIndex, viewData.SliderValue * 10000);
+                paramFunc.SetDGDetailPoint(playerIndex, viewData.SliderValue * PointsPerStock);
                 return (false, PreHookResult.Continue);
             }
 
             paramFunc.ChangeDGType(playerIndex, app.training.TM_DG_GAUGE_TYPE.POINT);
-            paramFunc.SetDGDetailPoint(playerIndex, viewData.SliderValue * 1000);
+            paramFunc.SetDGDetailPoint(playerIndex, viewData.SliderValue * PointsPerPreciseStep);
             paramFunc.SetDGStock(playerIndex, (app.training.TM_DG_STOCK)(viewData.SliderValue / 10));
             // TODO: this is temporary. The devs changed something that "broke" how the Point stuff is used, so now it only works as "fixed".
             paramFunc.SetDGPointLock(playerIndex, true);
@@ -249,10 +286,26 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
     private List<UICustomElementRequestNode> CreateRandomizerSubmenuElements(bool isP1)
     {
+        var playerIndex = isP1 ? 0 : 1;
         var playerLabel = isP1 ? "P1" : "P2";
         var enableGuid = isP1 ? DRIVE_GAUGE_P1_RANDOMIZER_ENABLE_SPINNER : DRIVE_GAUGE_P2_RANDOMIZER_ENABLE_SPINNER;
         var upperGuid = isP1 ? DRIVE_GAUGE_P1_RANDOMIZER_UPPER_BOUND : DRIVE_GAUGE_P2_RANDOMIZER_UPPER_BOUND;
         var lowerGuid = isP1 ? DRIVE_GAUGE_P1_RANDOMIZER_LOWER_BOUND : DRIVE_GAUGE_P2_RANDOMIZER_LOWER_BOUND;
+
+        int GetStepSize()
+        {
+            return IsPointMode(playerIndex) ? PointsPerPreciseStep : PointsPerStock;
+        }
+
+        int GetMinStep()
+        {
+            return IsPointMode(playerIndex) ? MinPreciseBound : MinStockBound;
+        }
+
+        int GetMaxStep()
+        {
+            return IsPointMode(playerIndex) ? MaxPreciseBound : MaxStockBound;
+        }
 
         bool GetEnabled()
         {
@@ -265,26 +318,44 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             else EnabledP2 = value;
         }
 
-        int GetLowerBound()
+        int GetLowerBoundRaw()
         {
             return isP1 ? _config.LowerBoundP1 : _config.LowerBoundP2;
         }
 
-        void SetLowerBound(int value)
+        void SetLowerBoundRaw(int value)
         {
-            if (isP1) _config.LowerBoundP1 = value;
-            else _config.LowerBoundP2 = value;
+            var clamped = Math.Clamp(value, MinRawBound, MaxRawBound);
+            if (isP1)
+            {
+                _config.LowerBoundP1 = clamped;
+                if (_config.UpperBoundP1 < clamped) _config.UpperBoundP1 = clamped;
+            }
+            else
+            {
+                _config.LowerBoundP2 = clamped;
+                if (_config.UpperBoundP2 < clamped) _config.UpperBoundP2 = clamped;
+            }
         }
 
-        int GetUpperBound()
+        int GetUpperBoundRaw()
         {
             return isP1 ? _config.UpperBoundP1 : _config.UpperBoundP2;
         }
 
-        void SetUpperBound(int value)
+        void SetUpperBoundRaw(int value)
         {
-            if (isP1) _config.UpperBoundP1 = value;
-            else _config.UpperBoundP2 = value;
+            var clamped = Math.Clamp(value, MinRawBound, MaxRawBound);
+            if (isP1)
+            {
+                _config.UpperBoundP1 = clamped;
+                if (_config.LowerBoundP1 > clamped) _config.LowerBoundP1 = clamped;
+            }
+            else
+            {
+                _config.UpperBoundP2 = clamped;
+                if (_config.LowerBoundP2 > clamped) _config.LowerBoundP2 = clamped;
+            }
         }
 
         var enableSpinner = new UICustomElementRequestNode(enableGuid,
@@ -301,17 +372,17 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             new SubMenuSpinnerInitializer(
                 new CustomMessage($"Upper Bound Randomization {playerLabel} Drive Gauge"),
                 new CustomMessage($"Set the maximum value {playerLabel}'s Drive Gauge can reach."),
-                (MinBound, MaxBound),
+                (MinStockBound, MaxStockBound),
                 GetEnabled()));
 
         upperBoundSpinner.AddHook(new SubMenuSpinnerHookRequest(
-            GetUpperBound,
-            val => (FormatValue(val), false),
-            () => (GetLowerBound(), MaxBound)));
+            () => RawToStep(GetUpperBoundRaw(), GetStepSize()),
+            val => (FormatValue(val, IsPointMode(playerIndex)), false),
+            () => (RawToStep(GetLowerBoundRaw(), GetStepSize()), GetMaxStep())));
 
         upperBoundSpinner.AddHook(new FunctionHookRequest((_, _, index) =>
         {
-            SetUpperBound(index);
+            SetUpperBoundRaw(StepToRaw(index, GetStepSize()));
             return false;
         }));
 
@@ -319,17 +390,17 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             new SubMenuSpinnerInitializer(
                 new CustomMessage($"Lower Bound Randomization {playerLabel} Drive Gauge"),
                 new CustomMessage($"Set the minimum value {playerLabel}'s Drive Gauge can drop to."),
-                (MinBound, MaxBound),
+                (MinStockBound, MaxStockBound),
                 GetEnabled()));
 
         lowerBoundSpinner.AddHook(new SubMenuSpinnerHookRequest(
-            GetLowerBound,
-            val => (FormatValue(val), false),
-            () => (MinBound, GetUpperBound())));
+            () => RawToStep(GetLowerBoundRaw(), GetStepSize()),
+            val => (FormatValue(val, IsPointMode(playerIndex)), false),
+            () => (GetMinStep(), RawToStep(GetUpperBoundRaw(), GetStepSize()))));
 
         lowerBoundSpinner.AddHook(new FunctionHookRequest((_, _, index) =>
         {
-            SetLowerBound(index);
+            SetLowerBoundRaw(StepToRaw(index, GetStepSize()));
             return false;
         }));
 
@@ -348,33 +419,47 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         return [enableSpinner, upperBoundSpinner, lowerBoundSpinner];
     }
 
+    private static void RandomizePlayer(app.training.tf_ParameterSetting.FuncData paramFunc, int playerIndex,
+        int lowerBoundRaw, int upperBoundRaw)
+    {
+        if (IsPointMode(playerIndex))
+        {
+            var lower = RawToStep(lowerBoundRaw, PointsPerPreciseStep);
+            var upper = RawToStep(upperBoundRaw, PointsPerPreciseStep);
+            var randVal = Random.Shared.Next(lower, upper + 1);
+            var (isBurnout, tenths) = DecodeEncodedValue(randVal);
+
+            paramFunc.SetBreakStart(playerIndex, isBurnout);
+            paramFunc.ChangeDGType(playerIndex, app.training.TM_DG_GAUGE_TYPE.POINT);
+            paramFunc.SetDGDetailPoint(playerIndex, tenths * PointsPerPreciseStep);
+            paramFunc.SetDGStock(playerIndex, (app.training.TM_DG_STOCK)(tenths / 10));
+            // TODO: this is temporary. The devs changed something that "broke" how the Point stuff is used, so now it only works as "fixed".
+            paramFunc.SetDGPointLock(playerIndex, true);
+            paramFunc.SetDGInfinity(playerIndex, true);
+            paramFunc.SetDGTimeRecovery(playerIndex, false);
+        }
+        else
+        {
+            var lower = RawToStep(lowerBoundRaw, PointsPerStock);
+            var upper = RawToStep(upperBoundRaw, PointsPerStock);
+            var randVal = Random.Shared.Next(lower, upper + 1);
+            var (isBurnout, stock) = DecodeEncodedValue(randVal);
+
+            paramFunc.SetBreakStart(playerIndex, isBurnout);
+            paramFunc.ChangeDGType(playerIndex, app.training.TM_DG_GAUGE_TYPE.STOCK);
+            paramFunc.SetDGStock(playerIndex, (app.training.TM_DG_STOCK)stock);
+        }
+    }
+
     public override void Randomize()
     {
         var paramFunc = GameSingletonManager.TrainingManager!.ParamFunc;
 
         if (EnabledP1)
-        {
-            var randVal = Random.Shared.Next(_config.LowerBoundP1, _config.UpperBoundP1 + 1);
-            var (isBurnout, stock) = DecodeValue(randVal);
-
-            paramFunc.SetBreakStart(0, isBurnout);
-
-            // set to stock
-            paramFunc.ChangeDGType(0, app.training.TM_DG_GAUGE_TYPE.STOCK);
-            paramFunc.SetDGStock(0, (app.training.TM_DG_STOCK)stock);
-        }
+            RandomizePlayer(paramFunc, 0, _config.LowerBoundP1, _config.UpperBoundP1);
 
         if (EnabledP2)
-        {
-            var randVal = Random.Shared.Next(_config.LowerBoundP2, _config.UpperBoundP2 + 1);
-            var (isBurnout, stock) = DecodeValue(randVal);
-
-            paramFunc.SetBreakStart(1, isBurnout);
-
-            // set to stock
-            paramFunc.ChangeDGType(1, app.training.TM_DG_GAUGE_TYPE.STOCK);
-            paramFunc.SetDGStock(1, (app.training.TM_DG_STOCK)stock);
-        }
+            RandomizePlayer(paramFunc, 1, _config.LowerBoundP2, _config.UpperBoundP2);
     }
 
     [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSlider", MethodHookType.Pre)]
@@ -474,7 +559,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             var remainder = current % stockWidth;
 
             var selectItem = sliderArrow._SelectItem;
-            var gaugeItem = selectItem.GetGuiChild("c_gage").As<via.gui.Panel>();
+            var gaugeItem = sliderArrow._PanelGauge;
 
             for (var i = 0; i < stocks; i++)
             {
