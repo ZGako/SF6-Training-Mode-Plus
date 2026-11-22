@@ -242,6 +242,9 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         try
         {
             var tm = GameSingletonManager.TrainingManager!;
+            tm.RequestSE(
+                app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                0);
             var playerData = tm._tData.ParameterSetting.PlayerDatas[playerIndex];
             var newType = playerData.DG_Type == app.training.TM_DG_GAUGE_TYPE.POINT
                 ? app.training.TM_DG_GAUGE_TYPE.STOCK
@@ -278,7 +281,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             paramFunc.SetDGInfinity(playerIndex, true);
             paramFunc.SetDGTimeRecovery(playerIndex, false);
 
-            GetTrainingMenuParam().InitSlider();
+            // GetTrainingMenuParam().InitSlider();
 
             return (false, PreHookResult.Skip);
         });
