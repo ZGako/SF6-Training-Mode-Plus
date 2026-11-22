@@ -42,6 +42,8 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
     private static readonly Guid SUPER_GAUGE_P2_RANDOMIZER_UPPER_BOUND = Guid.NewGuid();
     private static readonly Guid SUPER_GAUGE_P2_RANDOMIZER_LOWER_BOUND = Guid.NewGuid();
 
+    private static bool isFirstOpen;
+
     private static Config _config = new();
 
     private SuperGauge()
@@ -99,6 +101,7 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
 
     public override void Init()
     {
+        isFirstOpen = true;
         _config.LowerBoundP1 = Math.Clamp(_config.LowerBoundP1, MinRawBound, MaxRawBound);
         _config.UpperBoundP1 = Math.Clamp(_config.UpperBoundP1, _config.LowerBoundP1, MaxRawBound);
         _config.LowerBoundP2 = Math.Clamp(_config.LowerBoundP2, MinRawBound, MaxRawBound);
@@ -259,9 +262,9 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
 
             tm.ParamFunc.ChangeSAGaugeType(playerIndex, newType);
             var paramFunc = GetTrainingMenuParam();
-            paramFunc.InitSlider();
             paramFunc.UpdatePrimaryList();
             paramFunc.InitSecondaryList();
+            paramFunc.InitSlider();
         }
         catch (Exception ex)
         {
@@ -534,6 +537,7 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
     [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSecondaryList", MethodHookType.Pre)]
     public static PreHookResult OnInitSecondaryPre(Span<ulong> args)
     {
+        // TODO: can probably slim down this function, I believe I need some part of it, but most likely not all of it
         try
         {
             var currentParam = MemoryHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[1]);
@@ -716,6 +720,25 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
                    as ManagedObject)
                ?.As<app.training.UIFlowTrainingMenu.Param>() ??
                throw new NullReferenceException("Could not get field _ParamData of UITrainingMenu");
+    }
+
+
+    [MethodHook(
+        typeof(app.training.TrainingManager),
+        "OpenMenu(app.training.TrainingManager.MenuType, app.training.BaseParam)",
+        MethodHookType.Post)]
+    public static void OnFirstMenuOpen(ref ulong retval)
+    {
+        if (isFirstOpen)
+            isFirstOpen = false;
+        else
+            return;
+
+        // "hacky" fix for the menu not displaying properly, but it is what it is
+        var paramFunc = GetTrainingMenuParam();
+        paramFunc.UpdatePrimaryList();
+        paramFunc.InitSecondaryList();
+        paramFunc.InitSlider();
     }
 
     [JsonSourceGenerationOptions(
