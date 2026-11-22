@@ -182,28 +182,8 @@ public class GameSpeedPlus : ITrainingModePlusModule
             return defaultGameSpeed;
         }
 
-        // get nested members of the singleton for easier access
-        var tfFuncs = GameSingletonManager.TrainingManager._tfFuncs as IObject;
-        var entriesArray = (tfFuncs?.GetField("_entries") as ManagedObject)?.As<_System.Array>();
-
-        if (entriesArray == null || entriesArray.Length <= 10)
-        {
-            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
-            return defaultGameSpeed;
-        }
-
-        var entry10 = entriesArray.GetValue(10) as ManagedObject;
-        var tf_OS = (entry10 as IObject)?.GetField("value") as ManagedObject;
-        var gameData = ((tf_OS as IObject)?.GetField("_GameData") as ManagedObject)
-            ?.As<app.training.tf_OtherSetting.GameLocalData>();
-
-        if (gameData == null)
-        {
-            API.LogError("Failed to get current game speed index. Could not access the necessary fields.");
-            return defaultGameSpeed;
-        }
-
-        if (gameData.IsMenuPause) return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
+        if (GameSingletonManager.TrainingManager.OtherFunc?.GData?.IsMenuPause is true)
+            return app.training.TrainingFuncType.ENV_GAME_SPEED_2;
 
         if (GameSingletonManager.TrainingManager.TData.OtherSetting.Is_Speed_Setting)
         {
