@@ -41,6 +41,7 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
         randomizableFeatures.Add(DriveGauge.Instance);
         randomizableFeatures.Add(SuperGauge.Instance);
         randomizableFeatures.Add(PositionalSettings.Instance);
+        randomizableFeatures.Add(UniqueParameters.Instance);
     }
 
     public override void Init()
