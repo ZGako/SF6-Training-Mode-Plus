@@ -723,22 +723,40 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
     }
 
 
-    [MethodHook(
-        typeof(app.training.TrainingManager),
-        "OpenMenu(app.training.TrainingManager.MenuType, app.training.BaseParam)",
-        MethodHookType.Post)]
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSecondaryList", MethodHookType.Post)]
     public static void OnFirstMenuOpen(ref ulong retval)
     {
-        if (isFirstOpen)
-            isFirstOpen = false;
-        else
-            return;
+        if (!isFirstOpen) return;
 
+        try
+        {
+            var paramFunc = GetTrainingMenuParam();
+            var viewData = paramFunc.ViewDataList;
+
+            var hasSuperGauge = false;
+            for (var i = 0; i < viewData.Count; i++)
+            {
+                var data = viewData[i].Data;
+                if (data.FuncType is app.training.TrainingFuncType.PARAMETER_SA_GAUGE_1P
+                    or app.training.TrainingFuncType.PARAMETER_SA_GAUGE_2P)
+                {
+                    hasSuperGauge = true;
+                    break;
+                }
+            }
+
+            if (!hasSuperGauge) return;
+
+            isFirstOpen = false;
+            paramFunc.UpdatePrimaryList();
+            paramFunc.InitSecondaryList();
+            paramFunc.InitSlider();
+        }
+        catch (Exception e)
+        {
+            API.LogError($"Exception in OnFirstMenuOpen: {e.Message}");
+        }
         // "hacky" fix for the menu not displaying properly, but it is what it is
-        var paramFunc = GetTrainingMenuParam();
-        paramFunc.UpdatePrimaryList();
-        paramFunc.InitSecondaryList();
-        paramFunc.InitSlider();
     }
 
     [JsonSourceGenerationOptions(
