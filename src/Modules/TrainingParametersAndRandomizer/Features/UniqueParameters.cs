@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
+using SF6_Plugin_Core.UI.Helpers;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
@@ -25,10 +26,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     private static readonly Guid StandardMessageGuid = Guid.Parse("471dda2a-0981-4c84-ab5f-8960ade5eae5");
     private static readonly Guid ActivatedMessageGuid = Guid.Parse("220ad173-a227-4561-9fa3-04e0f269f6a4");
 
-    // Shared spinner item GUID pool reused across stock upper/lower bound option items (index -> Guid)
-    private static readonly List<Guid> StockBoundOptionGuids =
-        [.. Enumerable.Range(0, 16).Select(_ => Guid.NewGuid())];
-
     // Pre-allocated per-slot UI element GUIDs (max 4 active unique gauges across P1 and P2)
     private static readonly GaugeUiSlotGuids[] GaugeSlots =
         [.. Enumerable.Range(0, MaxActiveGaugeSlots).Select(_ => new GaugeUiSlotGuids())];
@@ -41,6 +38,10 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     private static bool _isInitialized;
     private static int _pendingP1FighterId = -1;
     private static int _pendingP2FighterId = -1;
+
+    // Tracks active mouse/controller spin input on a stock bound spinner so set_Num and SetSelectedIndex stay in sync
+    [ThreadStatic] private static int s_spinInputDepth;
+    [ThreadStatic] private static StockSpinContext s_spinContext;
 
     // Active gauges for the currently loaded P1/P2 characters (index maps to GaugeSlots[0..3])
     private readonly List<ParsedUniqueGaugeInfo> _activeGauges = [];
@@ -64,13 +65,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             UniqueParametersConfigJsonContext.Default.Config);
     }
 
-    private static Guid GetStockBoundOptionGuid(int optionIndex)
-    {
-        while (StockBoundOptionGuids.Count <= optionIndex)
-            StockBoundOptionGuids.Add(Guid.NewGuid());
-
-        return StockBoundOptionGuids[optionIndex];
-    }
 
     private static app.training.TrainingMenuData_Array1D GetUniqueParamMenuRows(app.training.TrainingManager tm)
     {
@@ -195,13 +189,47 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                optionGuids[1] == ActivatedMessageGuid;
     }
 
-    private void ParseAllUniqueGauges(app.training.TrainingManager tm)
+    private bool TryEnsureUniqueGaugesParsed(app.training.TrainingManager tm, string source)
+    {
+        if (_parsedGaugesByFighter.Count > 0) return true;
+
+        try
+        {
+            return TryParseAllUniqueGauges(tm, source);
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning(
+                $"[UniqueParameters] ({source}) Failed to parse unique gauges (will retry on ParameterSetting.Initialize): {ex.Message}");
+            _parsedGaugesByFighter.Clear();
+            return false;
+        }
+    }
+
+    private bool TryParseAllUniqueGauges(app.training.TrainingManager tm, string source)
     {
         _parsedGaugesByFighter.Clear();
 
+        var paramFunc = tm.ParamFunc;
+        var gData = paramFunc?._gData;
+        if (paramFunc == null || gData == null || (gData as IObject)?.GetAddress() is null or 0)
+        {
+            API.LogWarning(
+                $"[UniqueParameters] ({source}) ParamFunc/_gData not ready yet; deferring unique gauge parsing.");
+            return false;
+        }
+
+        var stockDict = gData.UniqueStockDict;
+        var timerDict = gData.UniqueTimerDict;
+        if (stockDict == null || timerDict == null)
+        {
+            API.LogWarning(
+                $"[UniqueParameters] ({source}) UniqueStockDict/UniqueTimerDict not ready yet; deferring unique gauge parsing.");
+            return false;
+        }
+
         var funcTypeNames = BuildUniqueGaugeFuncTypeNameMap();
         var paramSettingTypeDef = API.GetTDB().FindType("app.training.tf_ParameterSetting");
-        var gData = tm.ParamFunc._gData;
         var rows = GetUniqueParamMenuRows(tm);
 
         for (var rowIndex = 0; rowIndex < rows.Length; rowIndex++)
@@ -213,8 +241,8 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             if (!funcTypeNames.TryGetValue(funcTypeInt, out var funcTypeName)) continue;
             if (!TryParseUniqueGaugeFuncTypeName(funcTypeName, out var fighterId, out var subIndex)) continue;
 
-            var hasStock = gData.UniqueStockDict.ContainsKey(fighterId);
-            var hasTimer = gData.UniqueTimerDict.ContainsKey(fighterId);
+            var hasStock = stockDict.ContainsKey(fighterId);
+            var hasTimer = timerDict.ContainsKey(fighterId);
 
             UniqueGaugeBackingType backingType;
             if (hasStock && !hasTimer)
@@ -276,6 +304,8 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
             list.Add(info);
         }
+
+        return _parsedGaugesByFighter.Count > 0;
     }
 
     private static int GetMaxBoundForGauge(ParsedUniqueGaugeInfo gauge)
@@ -447,8 +477,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 if (vd?.Data != null && dependentFuncTypes.Contains(vd.Data.FuncType))
                     vd.IsDisable = !enabled;
             }
-
-        uiFlowParam.UpdateSecondaryList();
     }
 
     private UICustomElementRequestNode CreateRandomizerToggleSpinner(
@@ -485,13 +513,35 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     }
 
     private static List<UICustomElementRequestNode> CreateStockOptionItems(
-        System.Collections.Generic.IReadOnlyList<Guid> optionMessageGuids)
+        ParsedUniqueGaugeInfo gauge, GaugeUiSlotGuids slotGuids, bool isUpperBound)
     {
+        var optionMessageGuids = gauge.OptionMessageGuids;
         var items = new List<UICustomElementRequestNode>(optionMessageGuids.Count);
         for (var i = 0; i < optionMessageGuids.Count; i++)
-            items.Add(new UICustomElementRequestNode(
-                GetStockBoundOptionGuid(i),
-                new SpinnerItemTextInitializer(new CustomMessage(optionMessageGuids[i]))));
+        {
+            var optionIndex = i;
+            var itemGuid = isUpperBound
+                ? slotGuids.GetUpperBoundOptionGuid(optionIndex)
+                : slotGuids.GetLowerBoundOptionGuid(optionIndex);
+
+            var item = new UICustomElementRequestNode(
+                itemGuid,
+                new SpinnerItemTextInitializer(new CustomMessage(optionMessageGuids[optionIndex])));
+
+            item.AddHook(new FunctionHookRequest((_, _, _) =>
+            {
+                if (isUpperBound)
+                    SetUpperBound(gauge, optionIndex);
+                else
+                    SetLowerBound(gauge, optionIndex);
+
+                // API.LogInfo(
+                //     $"[UniqueParameters][StockSpin] FunctionHook ({gauge.FuncTypeName}, {(isUpperBound ? "Upper" : "Lower")}) -> optionIndex={optionIndex}, cfg=[{GetLowerBound(gauge)}..{GetUpperBound(gauge)}]");
+                return false;
+            }));
+
+            items.Add(item);
+        }
 
         return items;
     }
@@ -572,14 +622,28 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                         new CustomMessage("Randomizer Upper Bound"),
                         new CustomMessage("Set the upper bound for stock randomization."),
                         isRandomizerEnabled));
-                upperBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge.OptionMessageGuids)]);
+                upperBoundSpinner.AddHook(new SpinBoxHookRequest(_ =>
+                {
+                    var val = GetUpperBound(gauge);
+                    // API.LogInfo(
+                    //     $"[UniqueParameters][StockSpin] InitSpinBox ({gauge.FuncTypeName}, Upper) -> val={val}");
+                    return slotGuids.GetUpperBoundOptionGuid(val);
+                }));
+                upperBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge, slotGuids, true)]);
 
                 var lowerBoundSpinner = new UICustomElementRequestNode(slotGuids.LowerBoundElement,
                     new SpinnerInitializer(
                         new CustomMessage("Randomizer Lower Bound"),
                         new CustomMessage("Set the lower bound for stock randomization."),
                         isRandomizerEnabled));
-                lowerBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge.OptionMessageGuids)]);
+                lowerBoundSpinner.AddHook(new SpinBoxHookRequest(_ =>
+                {
+                    var val = GetLowerBound(gauge);
+                    // API.LogInfo(
+                    //     $"[UniqueParameters][StockSpin] InitSpinBox ({gauge.FuncTypeName}, Lower) -> val={val}");
+                    return slotGuids.GetLowerBoundOptionGuid(val);
+                }));
+                lowerBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge, slotGuids, false)]);
 
                 dependentNodes.AddRange([upperBoundSpinner, lowerBoundSpinner]);
                 return [randomizerToggle, upperBoundSpinner, lowerBoundSpinner];
@@ -663,12 +727,12 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
         try
         {
-            ParseAllUniqueGauges(tm);
             _activeP1FighterId = -1;
             _activeP2FighterId = -1;
             _isInitialized = true;
 
-            RefreshActiveCharacterUI(tm);
+            if (TryEnsureUniqueGaugesParsed(tm, "Init"))
+                RefreshActiveCharacterUI(tm);
         }
         catch (Exception ex)
         {
@@ -691,6 +755,26 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     public override void Randomize()
     {
+        if (!IsRandomizedEnabled || _activeGauges.Count == 0) return;
+
+        var paramFunc = GameSingletonManager.TrainingManager?.ParamFunc;
+        if (paramFunc == null) return;
+
+        foreach (var gauge in _activeGauges)
+        {
+            var cfg = GetOrCreateGaugeConfig(gauge);
+            if (!cfg.RandomizerEnabled) continue;
+
+            switch (gauge.Category)
+            {
+                case UniqueGaugeCategory.Stock:
+                {
+                    var randomStock = Random.Shared.Next(cfg.LowerBound, cfg.UpperBound + 1);
+                    paramFunc.SetUnique((app.CHARA_ID)gauge.FighterId, (app.training.UNIQUE_STOCK_TYPE)randomStock);
+                    break;
+                }
+            }
+        }
     }
 
     [MethodHook(typeof(app.training.TrainingManager),
@@ -725,12 +809,254 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
         try
         {
-            Instance.RefreshActiveCharacterUI(tm);
+            if (Instance.TryEnsureUniqueGaugesParsed(tm, "ParamSettingInitialize"))
+                Instance.RefreshActiveCharacterUI(tm);
         }
         catch (Exception ex)
         {
             API.LogError($"[UniqueParameters] Failed to refresh unique parameters on Initialize: {ex}");
         }
+    }
+
+    private bool TryGetStockBoundRange(Guid funcId, out int minBound, out int maxBound)
+    {
+        for (var slot = 0; slot < _activeGauges.Count; slot++)
+        {
+            var gauge = _activeGauges[slot];
+            if (gauge.Category != UniqueGaugeCategory.Stock) continue;
+
+            var slotGuids = GaugeSlots[slot];
+            if (funcId == slotGuids.UpperBoundElement || slotGuids.IsUpperBoundOptionGuid(funcId))
+            {
+                minBound = GetLowerBound(gauge);
+                maxBound = GetMaxBoundForGauge(gauge);
+                return true;
+            }
+
+            if (funcId == slotGuids.LowerBoundElement || slotGuids.IsLowerBoundOptionGuid(funcId))
+            {
+                minBound = 0;
+                maxBound = GetUpperBound(gauge);
+                return true;
+            }
+        }
+
+        minBound = 0;
+        maxBound = 0;
+        return false;
+    }
+
+    private static void TryBeginStockSpinContext(ulong spinAddress, int direction, bool allowWrap, string source)
+    {
+        if (!_isInitialized || spinAddress == 0) return;
+
+        try
+        {
+            var tm = GameSingletonManager.TrainingManager;
+            if (tm == null || !tm.IsInit || tm._ActiveMenuType != app.training.TrainingManager.MenuType.ALL)
+                return;
+
+            var menuAllObj = tm._UITrainingMenu_All as IObject;
+            if (menuAllObj == null)
+                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: _UITrainingMenu_All is null.");
+                return;
+
+            var paramData = (menuAllObj.GetField("_ParamData") as ManagedObject)
+                ?.As<app.training.UIFlowTrainingMenu.Param>();
+            if (paramData == null)
+                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: _ParamData is null.");
+                return;
+
+            var currentData = paramData.CurrentData;
+            if (currentData == null)
+            {
+                var secondaryIndex = paramData.SecondaryListIndex;
+                if (secondaryIndex < 0 || secondaryIndex >= paramData.ViewDataList.Count)
+                    // API.LogWarning(
+                    //     $"[UniqueParameters][StockSpin] {source}: CurrentData null and SecondaryListIndex={secondaryIndex} out of range (count={paramData.ViewDataList.Count}).");
+                    return;
+
+                currentData = paramData.ViewDataList[secondaryIndex]?.Data;
+            }
+
+            if (currentData == null)
+                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: resolved currentData is null.");
+                return;
+
+            var funcTypeInt = (int)currentData.FuncType;
+            if (!UIHelpers.TryGetFunctionId(funcTypeInt, out var funcId))
+                // API.LogInfo(
+                //     $"[UniqueParameters][StockSpin] {source}: funcType={funcTypeInt} (secIdx={paramData.SecondaryListIndex}) has no custom GUID.");
+                return;
+
+            if (!Instance.TryGetStockBoundRange(funcId, out var minBound, out var maxBound))
+                // API.LogInfo(
+                //     $"[UniqueParameters][StockSpin] {source}: funcId={funcId} (funcType={funcTypeInt}) is not a stock bound spinner.");
+                return;
+
+            var spin = MemoryHelpers.GetAddressAs<app.UIPartsSpin>(spinAddress);
+            var child0 = spin?.GetChild(0);
+            var scrollListAddress = (child0 as IObject)?.GetAddress() ?? 0;
+
+            s_spinContext = new StockSpinContext(
+                true,
+                spinAddress,
+                scrollListAddress,
+                direction,
+                allowWrap,
+                minBound,
+                maxBound);
+
+            // API.LogInfo(
+            //     $"[UniqueParameters][StockSpin] {source}: CONTEXT STARTED -> funcId={funcId}, range=[{minBound}..{maxBound}], dir={direction}, allowWrap={allowWrap}, spin=0x{spinAddress:X}, curNum={spin?.Num}, child0=0x{scrollListAddress:X} ({(child0 as IObject)?.GetTypeDefinition()?.FullName ?? "null"})");
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"[UniqueParameters] Failed to begin stock spin context ({source}): {ex}");
+        }
+    }
+
+    private static int AdjustStockBoundValue(int incoming, StockSpinContext ctx)
+    {
+        if (incoming >= ctx.MinBound && incoming <= ctx.MaxBound)
+            return incoming;
+
+        if (ctx.Direction > 0)
+            return ctx.AllowWrap ? ctx.MinBound : ctx.MaxBound;
+
+        return ctx.AllowWrap ? ctx.MaxBound : ctx.MinBound;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin), "Add()", MethodHookType.Pre)]
+    public static PreHookResult OnSpinAddPre(Span<ulong> args)
+    {
+        if (s_spinInputDepth == 0 && args.Length >= 2)
+            TryBeginStockSpinContext(args[1], 1, true, "Add");
+        // else if (s_spinContext.Active)
+        //     API.LogInfo(
+        //         $"[UniqueParameters][StockSpin] Nested Add Pre: depth={s_spinInputDepth}, spin=0x{(args.Length >= 2 ? args[1] : 0):X}");
+
+        s_spinInputDepth++;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin), "Add()", MethodHookType.Post)]
+    public static void OnSpinAddPost(ref ulong retval)
+    {
+        if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
+            // if (s_spinContext.Active)
+            //     API.LogInfo("[UniqueParameters][StockSpin] Add Post: clearing context.");
+            s_spinContext = default;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin), "Sub()", MethodHookType.Pre)]
+    public static PreHookResult OnSpinSubPre(Span<ulong> args)
+    {
+        if (s_spinInputDepth == 0 && args.Length >= 2)
+            TryBeginStockSpinContext(args[1], -1, true, "Sub");
+        // else if (s_spinContext.Active)
+        //     API.LogInfo(
+        //         $"[UniqueParameters][StockSpin] Nested Sub Pre: depth={s_spinInputDepth}, spin=0x{(args.Length >= 2 ? args[1] : 0):X}");
+
+        s_spinInputDepth++;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin), "Sub()", MethodHookType.Post)]
+    public static void OnSpinSubPost(ref ulong retval)
+    {
+        if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
+            // if (s_spinContext.Active)
+            //     API.LogInfo("[UniqueParameters][StockSpin] Sub Post: clearing context.");
+            s_spinContext = default;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin),
+        "InputDirection(app.UIPartsItemDirection, app.InputDigitalFlag)", MethodHookType.Pre)]
+    public static PreHookResult OnSpinInputDirectionPre(Span<ulong> args)
+    {
+        if (s_spinInputDepth == 0 && args.Length >= 4)
+        {
+            var direction = (app.UIPartsItemDirection)(int)args[2];
+            var flags = (app.InputDigitalFlag)(int)args[3];
+
+            var dirSign = direction switch
+            {
+                app.UIPartsItemDirection.Left => -1,
+                app.UIPartsItemDirection.Right => 1,
+                _ => 0
+            };
+
+            if (dirSign != 0 && (flags & (app.InputDigitalFlag.Trigger | app.InputDigitalFlag.Repeat)) != 0)
+            {
+                var allowWrap = (flags & app.InputDigitalFlag.Trigger) != 0;
+                TryBeginStockSpinContext(args[1], dirSign, allowWrap, $"InputDirection({direction},{flags})");
+            }
+        }
+
+        s_spinInputDepth++;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin),
+        "InputDirection(app.UIPartsItemDirection, app.InputDigitalFlag)", MethodHookType.Post)]
+    public static void OnSpinInputDirectionPost(ref ulong retval)
+    {
+        if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
+            // if (s_spinContext.Active)
+            //     API.LogInfo("[UniqueParameters][StockSpin] InputDirection Post: clearing context.");
+            s_spinContext = default;
+    }
+
+    private static int ResolveAndSyncStockBoundValue(int incoming)
+    {
+        if (s_spinContext.HasForcedValue)
+            return s_spinContext.ForcedValue;
+
+        var adjusted = AdjustStockBoundValue(incoming, s_spinContext);
+        if (adjusted != incoming)
+            s_spinContext = s_spinContext with { HasForcedValue = true, ForcedValue = adjusted };
+
+        return adjusted;
+    }
+
+    [MethodHook(typeof(app.UIPartsSpin), "set_Num(System.Int32)", MethodHookType.Pre)]
+    public static PreHookResult OnSpinSetNumPre(Span<ulong> args)
+    {
+        if (!s_spinContext.Active || args.Length < 3 || args[1] != s_spinContext.SpinAddress)
+            return PreHookResult.Continue;
+
+        var incoming = (int)args[2];
+        // var wasSynced = s_spinContext.HasForcedValue;
+        var adjusted = ResolveAndSyncStockBoundValue(incoming);
+        // API.LogInfo(
+        //     $"[UniqueParameters][StockSpin] set_Num: spin=0x{args[1]:X}, incoming={incoming} -> adjusted={adjusted} (synced={wasSynced}, range=[{s_spinContext.MinBound}..{s_spinContext.MaxBound}], dir={s_spinContext.Direction}, wrap={s_spinContext.AllowWrap})");
+
+        if (adjusted != incoming)
+            args[2] = (ulong)adjusted;
+
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.UIPartsScrollList), "SetSelectedIndex(System.Int32, System.Boolean)", MethodHookType.Pre)]
+    public static PreHookResult OnScrollListSetSelectedIndexPre(Span<ulong> args)
+    {
+        if (!s_spinContext.Active || args.Length < 3)
+            return PreHookResult.Continue;
+
+        if (s_spinContext.ScrollListAddress != 0 && args[1] != s_spinContext.ScrollListAddress)
+            return PreHookResult.Continue;
+
+        var incoming = (int)args[2];
+        // var wasSynced = s_spinContext.HasForcedValue;
+        var adjusted = ResolveAndSyncStockBoundValue(incoming);
+        // API.LogInfo(
+        //     $"[UniqueParameters][StockSpin] SetSelectedIndex: list=0x{args[1]:X}, incoming={incoming} -> adjusted={adjusted} (synced={wasSynced}, range=[{s_spinContext.MinBound}..{s_spinContext.MaxBound}], dir={s_spinContext.Direction}, wrap={s_spinContext.AllowWrap})");
+
+        if (adjusted != incoming)
+            args[2] = (ulong)adjusted;
+
+        return PreHookResult.Continue;
     }
 
     private enum UniqueGaugeBackingType
@@ -762,8 +1088,22 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         public int AppendIndex => MenuRowIndex + 1;
     }
 
+    private readonly record struct StockSpinContext(
+        bool Active,
+        ulong SpinAddress,
+        ulong ScrollListAddress,
+        int Direction,
+        bool AllowWrap,
+        int MinBound,
+        int MaxBound,
+        bool HasForcedValue = false,
+        int ForcedValue = 0);
+
     private sealed class GaugeUiSlotGuids
     {
+        private readonly List<Guid> _lowerBoundOptionGuids = [.. Enumerable.Range(0, 16).Select(_ => Guid.NewGuid())];
+        private readonly List<Guid> _upperBoundOptionGuids = [.. Enumerable.Range(0, 16).Select(_ => Guid.NewGuid())];
+
         public Guid RandomizerEnableSpinner { get; } = Guid.NewGuid();
         public Guid RandomizerEnableOn { get; } = Guid.NewGuid();
         public Guid RandomizerEnableOff { get; } = Guid.NewGuid();
@@ -771,6 +1111,32 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         public Guid ProbabilitySlider { get; } = Guid.NewGuid();
         public Guid UpperBoundElement { get; } = Guid.NewGuid();
         public Guid LowerBoundElement { get; } = Guid.NewGuid();
+
+        public Guid GetUpperBoundOptionGuid(int optionIndex)
+        {
+            while (_upperBoundOptionGuids.Count <= optionIndex)
+                _upperBoundOptionGuids.Add(Guid.NewGuid());
+
+            return _upperBoundOptionGuids[optionIndex];
+        }
+
+        public Guid GetLowerBoundOptionGuid(int optionIndex)
+        {
+            while (_lowerBoundOptionGuids.Count <= optionIndex)
+                _lowerBoundOptionGuids.Add(Guid.NewGuid());
+
+            return _lowerBoundOptionGuids[optionIndex];
+        }
+
+        public bool IsUpperBoundOptionGuid(Guid guid)
+        {
+            return _upperBoundOptionGuids.Contains(guid);
+        }
+
+        public bool IsLowerBoundOptionGuid(Guid guid)
+        {
+            return _lowerBoundOptionGuids.Contains(guid);
+        }
     }
 
     [JsonSourceGenerationOptions(
