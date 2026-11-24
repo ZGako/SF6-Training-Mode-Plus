@@ -21,10 +21,11 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     private static readonly List<int> PathToUniqueParamMenu = [1, 8];
 
-    // Known game localization message GUIDs used to classify unique gauge options
+    // Known game localization message GUIDs used to classify unique gauge options and units
     private static readonly Guid InfiniteMessageGuid = Guid.Parse("d6184f70-057a-42d7-b925-bd3a42d74970");
     private static readonly Guid StandardMessageGuid = Guid.Parse("471dda2a-0981-4c84-ab5f-8960ade5eae5");
     private static readonly Guid ActivatedMessageGuid = Guid.Parse("220ad173-a227-4561-9fa3-04e0f269f6a4");
+    private static readonly Guid PercentUnitMessageGuid = Guid.Parse("86bf146b-7aa4-447c-8a20-35e4cb943b7d");
 
     // Pre-allocated per-slot UI element GUIDs (max 4 active unique gauges across P1 and P2)
     private static readonly GaugeUiSlotGuids[] GaugeSlots =
@@ -42,12 +43,17 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     // Tracks active mouse/controller spin input on a stock bound spinner so set_Num and SetSelectedIndex stay in sync
     [ThreadStatic] private static int s_spinInputDepth;
     [ThreadStatic] private static StockSpinContext s_spinContext;
+    [ThreadStatic] private static ulong s_pendingSliderParamAddress;
 
     // Active gauges for the currently loaded P1/P2 characters (index maps to GaugeSlots[0..3])
     private readonly List<ParsedUniqueGaugeInfo> _activeGauges = [];
 
     // Parsed once per Init() from the unmodified _UIData._MenuData tree + TDB metadata
     private readonly Dictionary<int, List<ParsedUniqueGaugeInfo>> _parsedGaugesByFighter = [];
+
+    // Per-slot "Initial Timer Value" slider node (only enabled when that install timer gauge is set to Activate/MAX_START)
+    private readonly UICustomElementRequestNode?[] _slotInitialTimerNodes =
+        new UICustomElementRequestNode?[MaxActiveGaugeSlots];
 
     // Per-slot UI nodes that should be disabled whenever that slot's randomizer is off
     private readonly List<UICustomElementRequestNode>[] _slotRandomizerDependentNodes =
@@ -151,15 +157,17 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             : Guid.Empty;
     }
 
-    private static (List<Guid> OptionMessageGuids, bool AllowsInfinite) ParseGaugeChildMessages(
-        app.training.TrainingMenuData row)
+    private static (List<Guid> OptionMessageGuids, bool AllowsInfinite, List<(int ChildIndex, bool IsActivated)>
+        ChildOptions)
+        ParseGaugeChildMessages(app.training.TrainingMenuData row)
     {
         var optionGuids = new List<Guid>();
+        var childOptions = new List<(int ChildIndex, bool IsActivated)>();
         var allowsInfinite = false;
 
         var children = row._ChildData;
         if (children == null || children.Length == 0)
-            return (optionGuids, allowsInfinite);
+            return (optionGuids, allowsInfinite, childOptions);
 
         var count = children.Length;
         for (var i = 0; i < count; i++)
@@ -170,6 +178,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             var msgGuid = ReadMessageGuid(child);
             if (msgGuid == Guid.Empty) continue;
 
+            // Record every original child index (including Infinite) so switching off Activate updates UI immediately
+            childOptions.Add((i, msgGuid == ActivatedMessageGuid));
+
             if (i == count - 1 && msgGuid == InfiniteMessageGuid)
             {
                 allowsInfinite = true;
@@ -179,7 +190,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             optionGuids.Add(msgGuid);
         }
 
-        return (optionGuids, allowsInfinite);
+        return (optionGuids, allowsInfinite, childOptions);
     }
 
     private static bool IsStandardActivatedPowerup(System.Collections.Generic.IReadOnlyList<Guid> optionGuids)
@@ -230,6 +241,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
         var funcTypeNames = BuildUniqueGaugeFuncTypeNameMap();
         var paramSettingTypeDef = API.GetTDB().FindType("app.training.tf_ParameterSetting");
+        var uniqueGaugeDataTypeDef = app.training.TrainingData.TM_ParameterSetting.UniqueGaugeData.REFType;
         var rows = GetUniqueParamMenuRows(tm);
 
         for (var rowIndex = 0; rowIndex < rows.Length; rowIndex++)
@@ -265,9 +277,10 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 continue;
             }
 
-            var (optionGuids, allowsInfinite) = ParseGaugeChildMessages(row);
+            var (optionGuids, allowsInfinite, childOptions) = ParseGaugeChildMessages(row);
 
             int? maxTimerValue = null;
+            uint? uniqueTimerFieldOffset = null;
             UniqueGaugeCategory category;
             if (backingType == UniqueGaugeBackingType.Timer)
             {
@@ -275,6 +288,15 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 category = maxTimerValue.HasValue
                     ? UniqueGaugeCategory.InstallTimer
                     : UniqueGaugeCategory.Powerup;
+
+                if (category == UniqueGaugeCategory.InstallTimer)
+                {
+                    var fieldName = $"timer_0_{fighterId:D3}";
+                    uniqueTimerFieldOffset = uniqueGaugeDataTypeDef?.GetField(fieldName)?.OffsetFromBase;
+                    if (!uniqueTimerFieldOffset.HasValue)
+                        API.LogWarning(
+                            $"[UniqueParameters] Could not find field '{fieldName}' on UniqueGaugeData for {funcTypeName}.");
+                }
             }
             else
             {
@@ -292,8 +314,10 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 BackingType = backingType,
                 Category = category,
                 MaxTimerValue = maxTimerValue,
+                UniqueTimerFieldOffset = uniqueTimerFieldOffset,
                 AllowsInfinite = allowsInfinite,
-                OptionMessageGuids = optionGuids
+                OptionMessageGuids = optionGuids,
+                ChildOptions = childOptions
             };
 
             if (!_parsedGaugesByFighter.TryGetValue(fighterId, out var list))
@@ -417,6 +441,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     {
         base.Unload();
         _activeGauges.Clear();
+        Array.Clear(_slotInitialTimerNodes);
         foreach (var list in _slotRandomizerDependentNodes)
             list.Clear();
     }
@@ -447,6 +472,75 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 _activeGauges.Add(gauge);
             }
         }
+    }
+
+    private static bool IsTimerGaugeActivated(app.training.TrainingManager? tm, ParsedUniqueGaugeInfo gauge)
+    {
+        if (tm == null || !gauge.UniqueTimerFieldOffset.HasValue) return false;
+
+        var uniqueDataObj = tm._tData?.ParameterSetting?.UniqueData as IObject;
+        if (uniqueDataObj == null) return false;
+
+        var addr = uniqueDataObj.GetAddress();
+        if (addr == 0) return false;
+
+        var timerType = (app.training.UNIQUE_TIMER_TYPE)Marshal.ReadInt32(
+            (IntPtr)(addr + gauge.UniqueTimerFieldOffset.Value));
+        return timerType == app.training.UNIQUE_TIMER_TYPE.MAX_START;
+    }
+
+    private void SetInitialTimerSliderEnabled(int slot, bool enabled, app.training.BaseParam? baseParam)
+    {
+        if (slot < 0 || slot >= _slotInitialTimerNodes.Length) return;
+
+        var node = _slotInitialTimerNodes[slot];
+        if (node == null) return;
+
+        app.training.TrainingMenuData builtElement;
+        try
+        {
+            builtElement = node.GetBuiltElement();
+        }
+        catch
+        {
+            return;
+        }
+
+        builtElement.IsEnabled = enabled;
+
+        if (baseParam == null) return;
+
+        var uiFlowParam = ManagedProxy<app.training.UIFlowTrainingMenu.Param>.Create(baseParam);
+        var viewDataList = uiFlowParam?.ViewDataList;
+        if (viewDataList != null)
+            for (var i = 0; i < viewDataList.Count; i++)
+            {
+                var vd = viewDataList[i];
+                if (vd?.Data != null && vd.Data.FuncType == builtElement.FuncType)
+                    vd.IsDisable = !enabled;
+            }
+    }
+
+    private static UICustomElementRequestNode CreateActivationProbabilitySlider(
+        ParsedUniqueGaugeInfo gauge, GaugeUiSlotGuids slotGuids, string description, bool isRandomizerEnabled)
+    {
+        var slider = new UICustomElementRequestNode(slotGuids.ProbabilitySlider,
+            new SliderInitializer(
+                new CustomMessage("Activation Probability"),
+                new CustomMessage(description),
+                (0, 100),
+                1,
+                10,
+                isRandomizerEnabled,
+                new CustomMessage(PercentUnitMessageGuid)));
+
+        slider.AddHook(new FunctionHookRequest((_, viewData, _) =>
+        {
+            SetActivationProbability(gauge, viewData.SliderValue);
+            return false;
+        }));
+
+        return slider;
     }
 
     private void HandleRandomizerToggle(int slot, bool enabled, app.training.BaseParam baseParam)
@@ -535,8 +629,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 else
                     SetLowerBound(gauge, optionIndex);
 
-                // API.LogInfo(
-                //     $"[UniqueParameters][StockSpin] FunctionHook ({gauge.FuncTypeName}, {(isUpperBound ? "Upper" : "Lower")}) -> optionIndex={optionIndex}, cfg=[{GetLowerBound(gauge)}..{GetUpperBound(gauge)}]");
                 return false;
             }));
 
@@ -552,44 +644,48 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         var isRandomizerEnabled = IsGaugeRandomizerEnabled(gauge);
         var dependentNodes = _slotRandomizerDependentNodes[slot];
         dependentNodes.Clear();
+        _slotInitialTimerNodes[slot] = null;
 
         switch (gauge.Category)
         {
             case UniqueGaugeCategory.InstallTimer:
             {
                 var maxTimer = gauge.MaxTimerValue ?? 0;
+                var isTimerActivated = IsTimerGaugeActivated(GameSingletonManager.TrainingManager, gauge);
 
                 var initialValueSlider = new UICustomElementRequestNode(slotGuids.TimerInitialValueSlider,
                     new VitalSliderInitializer(
                         new CustomMessage("Initial Timer Value"),
                         new CustomMessage("Set the starting timer value when this install is activated."),
-                        (0, maxTimer)));
+                        (0, maxTimer),
+                        isTimerActivated,
+                        intervalOption: 10));
+
+                _slotInitialTimerNodes[slot] = initialValueSlider;
 
                 var randomizerToggle = CreateRandomizerToggleSpinner(slot, gauge, slotGuids);
 
-                var probabilitySlider = new UICustomElementRequestNode(slotGuids.ProbabilitySlider,
-                    new SliderInitializer(
-                        new CustomMessage("Activation Probability"),
-                        new CustomMessage(
-                            "Set the probability (%) of starting with this install activated when randomized."),
-                        (0, 100),
-                        1,
-                        10,
-                        isRandomizerEnabled));
+                var probabilitySlider = CreateActivationProbabilitySlider(
+                    gauge,
+                    slotGuids,
+                    "Set the probability (%) of starting with this install activated when randomized.",
+                    isRandomizerEnabled);
 
                 var upperBoundSlider = new UICustomElementRequestNode(slotGuids.UpperBoundElement,
                     new VitalSliderInitializer(
                         new CustomMessage("Randomizer Upper Bound"),
                         new CustomMessage("Set the upper bound for timer randomization."),
                         (0, maxTimer),
-                        isRandomizerEnabled));
+                        isRandomizerEnabled,
+                        intervalOption: 10));
 
                 var lowerBoundSlider = new UICustomElementRequestNode(slotGuids.LowerBoundElement,
                     new VitalSliderInitializer(
                         new CustomMessage("Randomizer Lower Bound"),
                         new CustomMessage("Set the lower bound for timer randomization."),
                         (0, maxTimer),
-                        isRandomizerEnabled));
+                        isRandomizerEnabled,
+                        intervalOption: 10));
 
                 dependentNodes.AddRange([probabilitySlider, upperBoundSlider, lowerBoundSlider]);
                 return [initialValueSlider, randomizerToggle, probabilitySlider, upperBoundSlider, lowerBoundSlider];
@@ -599,15 +695,11 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             {
                 var randomizerToggle = CreateRandomizerToggleSpinner(slot, gauge, slotGuids);
 
-                var probabilitySlider = new UICustomElementRequestNode(slotGuids.ProbabilitySlider,
-                    new SliderInitializer(
-                        new CustomMessage("Activation Probability"),
-                        new CustomMessage(
-                            "Set the probability (%) of starting with this powerup activated when randomized."),
-                        (0, 100),
-                        1,
-                        10,
-                        isRandomizerEnabled));
+                var probabilitySlider = CreateActivationProbabilitySlider(
+                    gauge,
+                    slotGuids,
+                    "Set the probability (%) of starting with this powerup activated when randomized.",
+                    isRandomizerEnabled);
 
                 dependentNodes.Add(probabilitySlider);
                 return [randomizerToggle, probabilitySlider];
@@ -623,12 +715,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                         new CustomMessage("Set the upper bound for stock randomization."),
                         isRandomizerEnabled));
                 upperBoundSpinner.AddHook(new SpinBoxHookRequest(_ =>
-                {
-                    var val = GetUpperBound(gauge);
-                    // API.LogInfo(
-                    //     $"[UniqueParameters][StockSpin] InitSpinBox ({gauge.FuncTypeName}, Upper) -> val={val}");
-                    return slotGuids.GetUpperBoundOptionGuid(val);
-                }));
+                    slotGuids.GetUpperBoundOptionGuid(GetUpperBound(gauge))));
                 upperBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge, slotGuids, true)]);
 
                 var lowerBoundSpinner = new UICustomElementRequestNode(slotGuids.LowerBoundElement,
@@ -637,12 +724,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                         new CustomMessage("Set the lower bound for stock randomization."),
                         isRandomizerEnabled));
                 lowerBoundSpinner.AddHook(new SpinBoxHookRequest(_ =>
-                {
-                    var val = GetLowerBound(gauge);
-                    // API.LogInfo(
-                    //     $"[UniqueParameters][StockSpin] InitSpinBox ({gauge.FuncTypeName}, Lower) -> val={val}");
-                    return slotGuids.GetLowerBoundOptionGuid(val);
-                }));
+                    slotGuids.GetLowerBoundOptionGuid(GetLowerBound(gauge))));
                 lowerBoundSpinner.AddChildren([.. CreateStockOptionItems(gauge, slotGuids, false)]);
 
                 dependentNodes.AddRange([upperBoundSpinner, lowerBoundSpinner]);
@@ -666,6 +748,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             .ToList();
 
         var elementsToAppend = new List<(int, UICustomElementRequestNode)>();
+        var timerOptionHooks = new List<(List<int> Path, FunctionHookRequest Request)>();
 
         for (var slot = 0; slot < _activeGauges.Count; slot++)
         {
@@ -675,6 +758,23 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             var nodes = CreateNodesForGauge(slot, gauge, slotGuids);
             foreach (var node in nodes)
                 elementsToAppend.Add((gauge.AppendIndex, node));
+
+            if (gauge.Category == UniqueGaugeCategory.InstallTimer)
+            {
+                var capturedSlot = slot;
+                foreach (var (childIndex, isActivatedOption) in gauge.ChildOptions)
+                {
+                    var capturedEnabled = isActivatedOption;
+                    var hook = new FunctionHookRequest((baseParam, _, _) =>
+                    {
+                        SetInitialTimerSliderEnabled(capturedSlot, capturedEnabled, baseParam);
+                        return (false, PreHookResult.Continue);
+                    });
+
+                    // MenuRowIndex and childIndex reference the original unmodified menu tree, as expected by PauseMenuManager
+                    timerOptionHooks.Add(([.. PathToUniqueParamMenu, gauge.MenuRowIndex, childIndex], hook));
+                }
+            }
         }
 
         try
@@ -691,6 +791,12 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 var appendReq = new PauseMenuAppendElementsRequest(elementsToAppend);
                 PauseMenuManager.RegisterModification(PathToUniqueParamMenu, appendReq);
                 ModificationRequests.Add(appendReq);
+            }
+
+            foreach (var (path, hook) in timerOptionHooks)
+            {
+                PauseMenuManager.RegisterModification(path, hook);
+                ModificationRequests.Add(hook);
             }
         }
         catch (Exception ex)
@@ -773,6 +879,18 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                     paramFunc.SetUnique((app.CHARA_ID)gauge.FighterId, (app.training.UNIQUE_STOCK_TYPE)randomStock);
                     break;
                 }
+
+                case UniqueGaugeCategory.Powerup:
+                {
+                    var activate = Random.Shared.Next(100) < cfg.ActivationProbability;
+                    if (gauge.BackingType == UniqueGaugeBackingType.Stock)
+                        paramFunc.SetUnique((app.CHARA_ID)gauge.FighterId,
+                            activate ? app.training.UNIQUE_STOCK_TYPE.ONE : app.training.UNIQUE_STOCK_TYPE.ZERO);
+                    else
+                        paramFunc.SetUnique((app.CHARA_ID)gauge.FighterId,
+                            activate ? app.training.UNIQUE_TIMER_TYPE.MAX_START : app.training.UNIQUE_TIMER_TYPE.OFF);
+                    break;
+                }
             }
         }
     }
@@ -818,6 +936,191 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         }
     }
 
+    private bool TryGetProbabilitySliderGauge(Guid funcId, out ParsedUniqueGaugeInfo gauge)
+    {
+        for (var i = 0; i < _activeGauges.Count; i++)
+            if (funcId == GaugeSlots[i].ProbabilitySlider)
+            {
+                gauge = _activeGauges[i];
+                return true;
+            }
+
+        gauge = null!;
+        return false;
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSecondaryList", MethodHookType.Pre)]
+    public static PreHookResult OnInitSecondaryListPre(Span<ulong> args)
+    {
+        if (!_isInitialized) return PreHookResult.Continue;
+
+        try
+        {
+            var tm = GameSingletonManager.TrainingManager;
+            if (tm == null) return PreHookResult.Continue;
+
+            var inst = Instance;
+            for (var slot = 0; slot < inst._activeGauges.Count; slot++)
+            {
+                var gauge = inst._activeGauges[slot];
+                if (gauge.Category != UniqueGaugeCategory.InstallTimer) continue;
+
+                var isActivated = IsTimerGaugeActivated(tm, gauge);
+                inst.SetInitialTimerSliderEnabled(slot, isActivated, null);
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning(
+                $"[UniqueParameters] Failed to sync initial timer slider state in InitSecondaryList: {ex.Message}");
+        }
+
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSlider", MethodHookType.Pre)]
+    public static PreHookResult OnInitSliderPre(Span<ulong> args)
+    {
+        if (!_isInitialized || args.Length < 2) return PreHookResult.Continue;
+
+        try
+        {
+            var currentParam = MemoryHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[1]);
+            var viewDataList = currentParam?.ViewDataList;
+            if (viewDataList == null) return PreHookResult.Continue;
+
+            var inst = Instance;
+            for (var i = 0; i < viewDataList.Count; i++)
+            {
+                var vd = viewDataList[i];
+                var data = vd?.Data;
+                if (data == null) continue;
+
+                if (!UIHelpers.TryGetFunctionId((int)data.FuncType, out var funcId)) continue;
+
+                if (inst.TryGetProbabilitySliderGauge(funcId, out var gauge))
+                {
+                    var prob = GetActivationProbability(gauge);
+                    vd!.SliderValue = prob;
+                    vd.Index = prob;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"[UniqueParameters] Failed to initialize unique parameter sliders: {ex.Message}");
+        }
+
+        return PreHookResult.Continue;
+    }
+
+    private static int ResolveFocusedSliderIndex(app.training.UIFlowTrainingMenu.Param param, int count)
+    {
+        var viewDataList = param.ViewDataList;
+        var selectChildIndex = param.SelectChildIndex;
+        var secondaryListIndex = param.SecondaryListIndex;
+        var currentDataFuncType = param.CurrentData != null ? (int)param.CurrentData.FuncType : -1;
+
+        if (currentDataFuncType >= 0)
+        {
+            if (selectChildIndex >= 0 && selectChildIndex < count &&
+                viewDataList[selectChildIndex]?.Data != null &&
+                (int)viewDataList[selectChildIndex].Data.FuncType == currentDataFuncType)
+                return selectChildIndex;
+
+            if (secondaryListIndex >= 0 && secondaryListIndex < count &&
+                viewDataList[secondaryListIndex]?.Data != null &&
+                (int)viewDataList[secondaryListIndex].Data.FuncType == currentDataFuncType)
+                return secondaryListIndex;
+        }
+
+        if (selectChildIndex >= 0 && selectChildIndex < count)
+            return selectChildIndex;
+
+        return secondaryListIndex >= 0 && secondaryListIndex < count ? secondaryListIndex : -1;
+    }
+
+    private static void HandleSliderChangePre(Span<ulong> args)
+    {
+        if (_isInitialized && args.Length >= 2)
+            s_pendingSliderParamAddress = args[1];
+    }
+
+    private static app.training.UIFlowTrainingMenu.Param? TryGetTrainingMenuAllParam()
+    {
+        var tm = GameSingletonManager.TrainingManager;
+        if (tm == null || !tm.IsInit || tm._ActiveMenuType != app.training.TrainingManager.MenuType.ALL)
+            return null;
+
+        return ((tm._UITrainingMenu_All as IObject)?.GetField("_ParamData") as ManagedObject)
+            ?.As<app.training.UIFlowTrainingMenu.Param>();
+    }
+
+    private static void HandleSliderChangePost(string source)
+    {
+        var paramAddress = s_pendingSliderParamAddress;
+        s_pendingSliderParamAddress = 0;
+
+        if (!_isInitialized || paramAddress == 0) return;
+
+        try
+        {
+            var param = TryGetTrainingMenuAllParam();
+            if (param == null || (param as IObject)?.GetAddress() != paramAddress) return;
+
+            var viewDataList = param.ViewDataList;
+            if (viewDataList == null) return;
+
+            var index = ResolveFocusedSliderIndex(param, viewDataList.Count);
+            if (index < 0 || index >= viewDataList.Count) return;
+
+            var viewData = viewDataList[index];
+            var data = viewData?.Data;
+            if (viewData == null || data == null) return;
+
+            var funcTypeInt = (int)data.FuncType;
+            if (!UIHelpers.TryGetFunctionId(funcTypeInt, out var funcId)) return;
+            if (!Instance.TryGetProbabilitySliderGauge(funcId, out var _)) return;
+
+            var baseParam = (param as ManagedObject)?.As<app.training.BaseParam>()
+                            ?? MemoryHelpers.GetAddressAs<app.training.BaseParam>(paramAddress);
+            if (baseParam == null) return;
+
+            GameSingletonManager.TrainingManager!._UIFunc.Function(
+                data.FuncType, baseParam, viewData, index);
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"[UniqueParameters] Failed in {source} Post: {ex.Message}");
+        }
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "OnSliderUp(app.UIPartsSlider)", MethodHookType.Pre)]
+    public static PreHookResult OnSliderUpPre(Span<ulong> args)
+    {
+        HandleSliderChangePre(args);
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "OnSliderUp(app.UIPartsSlider)", MethodHookType.Post)]
+    public static void OnSliderUpPost(ref ulong retval)
+    {
+        HandleSliderChangePost("OnSliderUp");
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "OnSliderDown(app.UIPartsSlider)", MethodHookType.Pre)]
+    public static PreHookResult OnSliderDownPre(Span<ulong> args)
+    {
+        HandleSliderChangePre(args);
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "OnSliderDown(app.UIPartsSlider)", MethodHookType.Post)]
+    public static void OnSliderDownPost(ref ulong retval)
+    {
+        HandleSliderChangePost("OnSliderDown");
+    }
+
     private bool TryGetStockBoundRange(Guid funcId, out int minBound, out int maxBound)
     {
         for (var slot = 0; slot < _activeGauges.Count; slot++)
@@ -852,47 +1155,23 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
         try
         {
-            var tm = GameSingletonManager.TrainingManager;
-            if (tm == null || !tm.IsInit || tm._ActiveMenuType != app.training.TrainingManager.MenuType.ALL)
-                return;
-
-            var menuAllObj = tm._UITrainingMenu_All as IObject;
-            if (menuAllObj == null)
-                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: _UITrainingMenu_All is null.");
-                return;
-
-            var paramData = (menuAllObj.GetField("_ParamData") as ManagedObject)
-                ?.As<app.training.UIFlowTrainingMenu.Param>();
-            if (paramData == null)
-                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: _ParamData is null.");
-                return;
+            var paramData = TryGetTrainingMenuAllParam();
+            if (paramData == null) return;
 
             var currentData = paramData.CurrentData;
             if (currentData == null)
             {
                 var secondaryIndex = paramData.SecondaryListIndex;
-                if (secondaryIndex < 0 || secondaryIndex >= paramData.ViewDataList.Count)
-                    // API.LogWarning(
-                    //     $"[UniqueParameters][StockSpin] {source}: CurrentData null and SecondaryListIndex={secondaryIndex} out of range (count={paramData.ViewDataList.Count}).");
-                    return;
+                if (secondaryIndex < 0 || secondaryIndex >= paramData.ViewDataList.Count) return;
 
                 currentData = paramData.ViewDataList[secondaryIndex]?.Data;
             }
 
-            if (currentData == null)
-                // API.LogWarning($"[UniqueParameters][StockSpin] {source}: resolved currentData is null.");
-                return;
+            if (currentData == null) return;
 
             var funcTypeInt = (int)currentData.FuncType;
-            if (!UIHelpers.TryGetFunctionId(funcTypeInt, out var funcId))
-                // API.LogInfo(
-                //     $"[UniqueParameters][StockSpin] {source}: funcType={funcTypeInt} (secIdx={paramData.SecondaryListIndex}) has no custom GUID.");
-                return;
-
-            if (!Instance.TryGetStockBoundRange(funcId, out var minBound, out var maxBound))
-                // API.LogInfo(
-                //     $"[UniqueParameters][StockSpin] {source}: funcId={funcId} (funcType={funcTypeInt}) is not a stock bound spinner.");
-                return;
+            if (!UIHelpers.TryGetFunctionId(funcTypeInt, out var funcId)) return;
+            if (!Instance.TryGetStockBoundRange(funcId, out var minBound, out var maxBound)) return;
 
             var spin = MemoryHelpers.GetAddressAs<app.UIPartsSpin>(spinAddress);
             var child0 = spin?.GetChild(0);
@@ -906,9 +1185,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
                 allowWrap,
                 minBound,
                 maxBound);
-
-            // API.LogInfo(
-            //     $"[UniqueParameters][StockSpin] {source}: CONTEXT STARTED -> funcId={funcId}, range=[{minBound}..{maxBound}], dir={direction}, allowWrap={allowWrap}, spin=0x{spinAddress:X}, curNum={spin?.Num}, child0=0x{scrollListAddress:X} ({(child0 as IObject)?.GetTypeDefinition()?.FullName ?? "null"})");
         }
         catch (Exception ex)
         {
@@ -932,9 +1208,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     {
         if (s_spinInputDepth == 0 && args.Length >= 2)
             TryBeginStockSpinContext(args[1], 1, true, "Add");
-        // else if (s_spinContext.Active)
-        //     API.LogInfo(
-        //         $"[UniqueParameters][StockSpin] Nested Add Pre: depth={s_spinInputDepth}, spin=0x{(args.Length >= 2 ? args[1] : 0):X}");
 
         s_spinInputDepth++;
         return PreHookResult.Continue;
@@ -944,8 +1217,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     public static void OnSpinAddPost(ref ulong retval)
     {
         if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
-            // if (s_spinContext.Active)
-            //     API.LogInfo("[UniqueParameters][StockSpin] Add Post: clearing context.");
             s_spinContext = default;
     }
 
@@ -954,9 +1225,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     {
         if (s_spinInputDepth == 0 && args.Length >= 2)
             TryBeginStockSpinContext(args[1], -1, true, "Sub");
-        // else if (s_spinContext.Active)
-        //     API.LogInfo(
-        //         $"[UniqueParameters][StockSpin] Nested Sub Pre: depth={s_spinInputDepth}, spin=0x{(args.Length >= 2 ? args[1] : 0):X}");
 
         s_spinInputDepth++;
         return PreHookResult.Continue;
@@ -966,8 +1234,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     public static void OnSpinSubPost(ref ulong retval)
     {
         if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
-            // if (s_spinContext.Active)
-            //     API.LogInfo("[UniqueParameters][StockSpin] Sub Post: clearing context.");
             s_spinContext = default;
     }
 
@@ -1003,8 +1269,6 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
     public static void OnSpinInputDirectionPost(ref ulong retval)
     {
         if (s_spinInputDepth > 0 && --s_spinInputDepth == 0)
-            // if (s_spinContext.Active)
-            //     API.LogInfo("[UniqueParameters][StockSpin] InputDirection Post: clearing context.");
             s_spinContext = default;
     }
 
@@ -1027,11 +1291,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             return PreHookResult.Continue;
 
         var incoming = (int)args[2];
-        // var wasSynced = s_spinContext.HasForcedValue;
         var adjusted = ResolveAndSyncStockBoundValue(incoming);
-        // API.LogInfo(
-        //     $"[UniqueParameters][StockSpin] set_Num: spin=0x{args[1]:X}, incoming={incoming} -> adjusted={adjusted} (synced={wasSynced}, range=[{s_spinContext.MinBound}..{s_spinContext.MaxBound}], dir={s_spinContext.Direction}, wrap={s_spinContext.AllowWrap})");
-
         if (adjusted != incoming)
             args[2] = (ulong)adjusted;
 
@@ -1048,11 +1308,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
             return PreHookResult.Continue;
 
         var incoming = (int)args[2];
-        // var wasSynced = s_spinContext.HasForcedValue;
         var adjusted = ResolveAndSyncStockBoundValue(incoming);
-        // API.LogInfo(
-        //     $"[UniqueParameters][StockSpin] SetSelectedIndex: list=0x{args[1]:X}, incoming={incoming} -> adjusted={adjusted} (synced={wasSynced}, range=[{s_spinContext.MinBound}..{s_spinContext.MaxBound}], dir={s_spinContext.Direction}, wrap={s_spinContext.AllowWrap})");
-
         if (adjusted != incoming)
             args[2] = (ulong)adjusted;
 
@@ -1081,8 +1337,15 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         public required UniqueGaugeBackingType BackingType { get; init; }
         public required UniqueGaugeCategory Category { get; init; }
         public int? MaxTimerValue { get; init; }
+        public uint? UniqueTimerFieldOffset { get; init; }
         public bool AllowsInfinite { get; init; }
         public required System.Collections.Generic.IReadOnlyList<Guid> OptionMessageGuids { get; init; }
+
+        public required System.Collections.Generic.IReadOnlyList<(int ChildIndex, bool IsActivated)> ChildOptions
+        {
+            get;
+            init;
+        }
 
         // 1-indexed append position for PauseMenuAppendElementsRequest (immediately after MenuRowIndex)
         public int AppendIndex => MenuRowIndex + 1;
