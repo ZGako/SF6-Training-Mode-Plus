@@ -647,14 +647,6 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
             var targetSideThickness = isTargetType ? saSideThickness : vitalSideThickness;
             var targetVerticalOffset = isTargetType ? saVerticalOffset : vitalVerticalOffset;
 
-            var targetColor = (isTargetType, isP1) switch
-            {
-                (true, true) => MakeColor(205, 28, 121),
-                (true, false) => MakeColor(28, 111, 205),
-                (false, true) => MakeColor(221, 28, 96),
-                (false, false) => MakeColor(14, 108, 187)
-            };
-
             var gaugeBg = gaugeItem.GetGuiChild("e_rect_gauge").As<via.gui.Rect>();
             var gaugeBase = gaugeItem.GetGuiChild("e_rect_base").As<via.gui.Rect>();
             var leftBorder = gaugeItem.GetGuiChild("e_tex_glow_L").As<via.gui.Texture>();
@@ -662,7 +654,18 @@ public partial class SuperGauge : RandomizableFeatureBase<SuperGauge>
             var topBorder = gaugeItem.GetGuiChild("e_tex_glow_T").As<via.gui.Texture>();
             var bottomBorder = gaugeItem.GetGuiChild("e_tex_glow_B").As<via.gui.Texture>();
 
-            gaugeBg.Color = targetColor;
+            if (isTargetType)
+            {
+                var (colorLeft, colorRight) = isP1
+                    ? (MakeColor(205, 28, 121), MakeColor(240, 102, 154))
+                    : (MakeColor(28, 111, 205), MakeColor(102, 212, 240));
+                gaugeBg.ColorLeft = colorLeft;
+                gaugeBg.ColorRight = colorRight;
+            }
+            else
+            {
+                gaugeBg.Color = isP1 ? MakeColor(221, 28, 96) : MakeColor(14, 108, 187);
+            }
             gaugeBg.Size = MakeSize(gaugeBg.Size.w, targetHeight);
             gaugeBase.Size = MakeSize(gaugeBase.Size.w, targetHeight);
 
