@@ -42,7 +42,34 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
     private static readonly Guid DRIVE_GAUGE_P2_RANDOMIZER_UPPER_BOUND = Guid.NewGuid();
     private static readonly Guid DRIVE_GAUGE_P2_RANDOMIZER_LOWER_BOUND = Guid.NewGuid();
 
+    private static readonly Field? FocusNewField = nBattle.cPlayer.REFType?.GetField("focus_new");
+    private static readonly Field? FocusWaitField = nBattle.cPlayer.REFType?.GetField("focus_wait");
+    private static readonly Field? IncapacitatedField = nBattle.cPlayer.REFType?.GetField("incapacitated");
+    private static readonly Method? SetDriveEmptyMethod = nBattle.cPlayer.REFType?.GetMethod("SetDriveEmpty");
+    private static readonly Method? SetDriveMaxMethod = nBattle.cPlayer.REFType?.GetMethod("SetDriveMax");
+
+    private static readonly Method? DriveEmptyMethod =
+        app.BattleSound.REFType?.GetMethod("DriveEmpty(System.UInt32)");
+
+    private static readonly Method? DriveEmptySoundMethod =
+        app.BattleSound.REFType?.GetMethod("DriveEmptySound(System.Int32)");
+
+    private static readonly Method? SetDGaugeEmptyEffectMethod =
+        nBattle.sGame.REFType?.GetMethod("setDGaugeEmptyEffect(System.Int32, System.Boolean)");
+
+    private static readonly Method? SetStatusEffectMethod =
+        nBattle.sGame.REFType?.GetMethod(
+            "setStatusEffect(System.Int32, app.battle.vfx.eSysStatusElementID, app.battle.VfxKey.eOperationType)");
+
+    private static readonly ManagedObject?[] BattlePlayers = new ManagedObject?[2];
+    private static ManagedObject? _battleSoundMo;
+    private static ManagedObject? _battleGameMo;
+    private static bool _isInitialized;
+
     private static Config _config = new();
+
+    [ThreadStatic] private static int s_updateDriveNormalDepth;
+    [ThreadStatic] private static int s_updateDriveTimerRecoveryDepth;
 
     private DriveGauge()
     {
@@ -75,9 +102,9 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
     private static bool IsPointMode(int playerIndex)
     {
-        var tm = GameSingletonManager.TrainingManager;
-        if (tm == null) return false;
-        return tm._tData.ParameterSetting.PlayerDatas[playerIndex].DG_Type == app.training.TM_DG_GAUGE_TYPE.POINT;
+        var playerDatas = GameSingletonManager.TrainingManager?._tData?.ParameterSetting?.PlayerDatas;
+        if (playerDatas == null || playerIndex < 0 || playerIndex >= playerDatas.Length) return false;
+        return playerDatas[playerIndex].DG_Type == app.training.TM_DG_GAUGE_TYPE.POINT;
     }
 
     private static (bool IsBurnout, int Magnitude) DecodeEncodedValue(int encoded)
@@ -121,6 +148,9 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         _config.UpperBoundP2 = Math.Clamp(_config.UpperBoundP2, _config.LowerBoundP2, MaxRawBound);
 
         IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
+
+        TryCacheBattleObjects();
+        _isInitialized = true;
 
         // Drive bar P1
         var fieldOverrideP1 = new FieldOverrideRequest
@@ -229,6 +259,45 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         ModificationRequests.Add(functionHookP2);
     }
 
+    public override void Unload()
+    {
+        _isInitialized = false;
+        Array.Clear(BattlePlayers);
+        _battleSoundMo = null;
+        _battleGameMo = null;
+        base.Unload();
+    }
+
+    private static void TryCacheBattleObjects()
+    {
+        try
+        {
+            var battle = API.GetTDB().FindType("gBattle");
+            var statics = battle?.Statics;
+            if (statics == null) return;
+
+            if (BattlePlayers[0] == null || BattlePlayers[1] == null)
+            {
+                var playerMo = statics.GetField("Player") as ManagedObject;
+                var mcPlayer = (playerMo as IObject)?.GetField("mcPlayer");
+                if (mcPlayer != null)
+                {
+                    var playerArray =
+                        mcPlayer.GetObjectAs<_System.Array>("Failed to retrieve cPlayer_Array1D from Player.");
+                    BattlePlayers[0] = playerArray[0] as ManagedObject;
+                    BattlePlayers[1] = playerArray[1] as ManagedObject;
+                }
+            }
+
+            _battleSoundMo ??= statics.GetField("Sound") as ManagedObject;
+            _battleGameMo ??= statics.GetField("Game") as ManagedObject;
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"[DriveGauge] Failed to cache gBattle objects: {ex.Message}");
+        }
+    }
+
     private static app.training.UIFlowTrainingMenu.Param GetTrainingMenuParam()
     {
         return ((GameSingletonManager.TrainingManager!._UITrainingMenu as IObject)?.GetField("_ParamData")
@@ -276,12 +345,6 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             paramFunc.ChangeDGType(playerIndex, app.training.TM_DG_GAUGE_TYPE.POINT);
             paramFunc.SetDGDetailPoint(playerIndex, viewData.SliderValue * PointsPerPreciseStep);
             paramFunc.SetDGStock(playerIndex, (app.training.TM_DG_STOCK)(viewData.SliderValue / 10));
-            // TODO: this is temporary. The devs changed something that "broke" how the Point stuff is used, so now it only works as "fixed".
-            paramFunc.SetDGPointLock(playerIndex, true);
-            paramFunc.SetDGInfinity(playerIndex, true);
-            paramFunc.SetDGTimeRecovery(playerIndex, false);
-
-            // GetTrainingMenuParam().InitSlider();
 
             return (false, PreHookResult.Skip);
         });
@@ -436,10 +499,6 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             paramFunc.ChangeDGType(playerIndex, app.training.TM_DG_GAUGE_TYPE.POINT);
             paramFunc.SetDGDetailPoint(playerIndex, tenths * PointsPerPreciseStep);
             paramFunc.SetDGStock(playerIndex, (app.training.TM_DG_STOCK)(tenths / 10));
-            // TODO: this is temporary. The devs changed something that "broke" how the Point stuff is used, so now it only works as "fixed".
-            paramFunc.SetDGPointLock(playerIndex, true);
-            paramFunc.SetDGInfinity(playerIndex, true);
-            paramFunc.SetDGTimeRecovery(playerIndex, false);
         }
         else
         {
@@ -463,6 +522,142 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
         if (EnabledP2)
             RandomizePlayer(paramFunc, 1, _config.LowerBoundP2, _config.UpperBoundP2);
+    }
+
+    [MethodHook(
+        typeof(app.training.tf_ParameterSetting),
+        "UpdateDriveNormal(app.training.TrainingFuncBase.TrainingPLData)",
+        MethodHookType.Pre)]
+    public static PreHookResult OnUpdateDriveNormalPre(Span<ulong> args)
+    {
+        s_updateDriveNormalDepth++;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(
+        typeof(app.training.tf_ParameterSetting),
+        "UpdateDriveNormal(app.training.TrainingFuncBase.TrainingPLData)",
+        MethodHookType.Post)]
+    public static void OnUpdateDriveNormalPost(ref ulong retval)
+    {
+        if (s_updateDriveNormalDepth > 0)
+            s_updateDriveNormalDepth--;
+    }
+
+    [MethodHook(
+        typeof(app.training.tf_ParameterSetting),
+        "UpdateDriveTimerRecovery(app.training.TrainingFuncBase.TrainingPLData)",
+        MethodHookType.Pre)]
+    public static PreHookResult OnUpdateDriveTimerRecoveryPre(Span<ulong> args)
+    {
+        s_updateDriveTimerRecoveryDepth++;
+        return PreHookResult.Continue;
+    }
+
+    [MethodHook(
+        typeof(app.training.tf_ParameterSetting),
+        "UpdateDriveTimerRecovery(app.training.TrainingFuncBase.TrainingPLData)",
+        MethodHookType.Post)]
+    public static void OnUpdateDriveTimerRecoveryPost(ref ulong retval)
+    {
+        if (s_updateDriveTimerRecoveryDepth > 0)
+            s_updateDriveTimerRecoveryDepth--;
+    }
+
+    [MethodHook(
+        typeof(app.training.tf_ParameterSetting),
+        "_SetDrive(System.Int32, nBattle.cPlayer, System.Int32, System.Boolean)",
+        MethodHookType.Pre)]
+    public static PreHookResult OnSetDrivePre(Span<ulong> args)
+    {
+        if (!_isInitialized)
+            return PreHookResult.Continue;
+
+        var fromNormal = s_updateDriveNormalDepth > 0;
+        var fromTimerRecovery = s_updateDriveTimerRecoveryDepth > 0;
+        if ((!fromNormal && !fromTimerRecovery) || args.Length < 3)
+            return PreHookResult.Continue;
+
+        try
+        {
+            var playerIndex = (int)args[2];
+            var playerDatas = GameSingletonManager.TrainingManager?._tData?.ParameterSetting?.PlayerDatas;
+            if (playerDatas == null || playerIndex < 0 || playerIndex >= playerDatas.Length)
+                return PreHookResult.Continue;
+
+            var playerData = playerDatas[playerIndex];
+            if (playerData.DG_Type != app.training.TM_DG_GAUGE_TYPE.POINT)
+                return PreHookResult.Continue;
+
+            if (fromTimerRecovery && FocusNewField != null && FocusWaitField != null && IncapacitatedField != null)
+            {
+                var playerMo = BattlePlayers[playerIndex];
+                if (playerMo == null)
+                {
+                    TryCacheBattleObjects();
+                    playerMo = BattlePlayers[playerIndex];
+                }
+
+                var cPlayerAddr = playerMo?.GetAddress() ?? 0;
+                if (cPlayerAddr != 0)
+                {
+                    var isCurrentlyBurnout =
+                        Marshal.ReadByte((nint)IncapacitatedField.GetDataRaw(cPlayerAddr, false)) != 0;
+                    var targetBurnout = playerData.Is_DG_Break;
+
+                    const short driveRecoveryWaitFrames = 3;
+                    Marshal.WriteInt32((nint)FocusNewField.GetDataRaw(cPlayerAddr, false), playerData.DG_Point);
+                    Marshal.WriteInt16((nint)FocusWaitField.GetDataRaw(cPlayerAddr, false), driveRecoveryWaitFrames);
+
+                    if (isCurrentlyBurnout != targetBurnout)
+                    {
+                        if (_battleSoundMo == null || _battleGameMo == null)
+                            TryCacheBattleObjects();
+
+                        if (targetBurnout)
+                        {
+                            SetDriveEmptyMethod?.Invoke(playerMo!, []);
+                            if (_battleSoundMo != null)
+                            {
+                                DriveEmptyMethod?.Invoke(_battleSoundMo, [(uint)playerIndex]);
+                                DriveEmptySoundMethod?.Invoke(_battleSoundMo, [playerIndex]);
+                            }
+
+                            if (_battleGameMo != null)
+                            {
+                                SetDGaugeEmptyEffectMethod?.Invoke(_battleGameMo, [playerIndex, false]);
+                                SetStatusEffectMethod?.Invoke(_battleGameMo, [
+                                    playerIndex,
+                                    (int)app.battle.vfx.eSysStatusElementID.DGAUGE_LOST,
+                                    (int)app.battle.VfxKey.eOperationType.CANCEL
+                                ]);
+                                SetStatusEffectMethod?.Invoke(_battleGameMo, [
+                                    playerIndex,
+                                    (int)app.battle.vfx.eSysStatusElementID.DGAUGE_LOST,
+                                    (int)app.battle.VfxKey.eOperationType.SPAWN
+                                ]);
+                            }
+                        }
+                        else
+                        {
+                            SetDriveMaxMethod?.Invoke(playerMo!, []);
+                        }
+                    }
+
+                    Marshal.WriteByte(
+                        (nint)IncapacitatedField.GetDataRaw(cPlayerAddr, false),
+                        (byte)(targetBurnout ? 1 : 0));
+                }
+            }
+
+            return PreHookResult.Skip;
+        }
+        catch (Exception e)
+        {
+            API.LogError($"Exception in OnSetDrivePre: {e.Message}");
+        }
+
+        return PreHookResult.Continue;
     }
 
     [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSlider", MethodHookType.Pre)]
