@@ -82,6 +82,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     private static app.training.TrainingMenuData_Array1D GetUniqueParamMenuRows(app.training.TrainingManager tm)
     {
+        var originalRows = PauseMenuManager.GetOriginalChildData(PathToUniqueParamMenu);
+        if (originalRows != null) return originalRows;
+
         var currentChildren = tm._UIData._MenuData;
         foreach (var index in PathToUniqueParamMenu)
         {
@@ -114,7 +117,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
             try
             {
-                var value = Convert.ToInt32(field.GetDataBoxed(0, false));
+                var rawPtr = field.GetDataRaw(0, false);
+                if (rawPtr == 0) continue;
+                var value = Marshal.ReadInt32((nint)rawPtr);
                 map[value] = name;
             }
             catch (Exception ex)
@@ -149,6 +154,12 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
         try
         {
+            if (field.IsLiteral() && field.Type.FullName == "System.Int32")
+            {
+                var rawPtr = field.GetDataRaw(0, false);
+                if (rawPtr != 0) return Marshal.ReadInt32((nint)rawPtr);
+            }
+
             return Convert.ToInt32(field.GetDataBoxed(0, false));
         }
         catch (Exception ex)

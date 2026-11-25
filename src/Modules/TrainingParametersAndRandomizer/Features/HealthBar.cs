@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.Localization;
@@ -255,9 +255,11 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
         ModificationRequests.Add(changeGuideMessageP1Req);
         ModificationRequests.Add(submenuOpenHookP1);
+        ModificationRequests.Add(submenuP1InputGuideHook);
         ModificationRequests.Add(appendChildP1Req);
         ModificationRequests.Add(changeGuideMessageP2Req);
         ModificationRequests.Add(submenuOpenHookP2);
+        ModificationRequests.Add(submenuP2InputGuideHook);
         ModificationRequests.Add(appendChildP2Req);
     }
 

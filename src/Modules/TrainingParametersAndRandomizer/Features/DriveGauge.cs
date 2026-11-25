@@ -591,7 +591,10 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
             if (fromTimerRecovery && FocusNewField != null && FocusWaitField != null && IncapacitatedField != null)
             {
-                var playerMo = BattlePlayers[playerIndex];
+                var playerMo = args.Length >= 4 && args[3] != 0 && ManagedObject.IsManagedObject(args[3])
+                    ? ManagedObject.ToManagedObject(args[3])
+                    : BattlePlayers[playerIndex];
+
                 if (playerMo == null)
                 {
                     TryCacheBattleObjects();
@@ -599,7 +602,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
                 }
 
                 var cPlayerAddr = playerMo?.GetAddress() ?? 0;
-                if (cPlayerAddr != 0)
+                if (cPlayerAddr != 0 && ManagedObject.IsManagedObject(cPlayerAddr))
                 {
                     var isCurrentlyBurnout =
                         Marshal.ReadByte((nint)IncapacitatedField.GetDataRaw(cPlayerAddr, false)) != 0;

@@ -1,4 +1,4 @@
-﻿global using System;
+global using System;
 global using System.Collections.Generic;
 global using System.Runtime.InteropServices;
 global using System.Linq;
@@ -29,10 +29,12 @@ public static class TrainingModePlus
         Path.Combine(DirectoryPath, "SF6_TrainingModePlus_Localization.json");
 
     private static readonly List<ITrainingModePlusModule> Modules = [];
+    private static bool _isUnloaded;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void InitializePlugin()
     {
+        _isUnloaded = false;
         API.LogLevel = 0;
         API.LogWarning("Loading TrainingModePlus C# plugin...");
 
@@ -69,6 +71,9 @@ public static class TrainingModePlus
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void UnloadPlugin()
     {
+        if (_isUnloaded) return;
+        _isUnloaded = true;
+
         API.LogInfo("Unloading TrainingModePlus C# plugin...");
 
         // Unsubscribe from Core events/singletons so Core holds zero references to this assembly
