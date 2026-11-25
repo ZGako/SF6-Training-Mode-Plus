@@ -13,12 +13,18 @@ namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Core;
 
 public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
 {
+    private const string EnabledOptionLabel = "<COLOR preset=\"FGM_Accent\">Enabled</COLOR>";
+
     private static readonly Guid RESTART_AND_RANDOMIZE_BUTTON = Guid.NewGuid();
+    private static readonly Guid ENABLE_RANDOMIZED_SETTINGS_SPINNER = Guid.NewGuid();
+    private static readonly Guid ENABLE_RANDOMIZED_SETTINGS_OFF = Guid.NewGuid();
+    private static readonly Guid ENABLE_RANDOMIZED_SETTINGS_ON = Guid.NewGuid();
 
     private static Config _config = new();
 
     private readonly List<IRandomizableFeatureBase> randomizableFeatures = [];
 
+    private bool _isInitialized;
     private bool _isRandomizerEnabled;
 
     private UICustomElementRequestNode? _randomizerButton;
@@ -32,6 +38,8 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
             () => _config,
             cfg => _config = cfg,
             RandomizerManagerConfigJsonContext.Default.Config);
+
+        LoadFeatures();
     }
 
     private void LoadFeatures()
@@ -44,20 +52,69 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
         randomizableFeatures.Add(UniqueParameters.Instance);
     }
 
+    public override System.Collections.Generic.IReadOnlyList<UICustomElementRequestNode> CreateSettingsUINodes(
+        bool isParentEnabled)
+    {
+        var spinner = new UICustomElementRequestNode(
+            ENABLE_RANDOMIZED_SETTINGS_SPINNER,
+            new SpinnerInitializer(
+                new CustomMessage("Enable Randomized Settings"),
+                new CustomMessage(
+                    "Enable or disable randomized training parameters, randomizer submenus, and the randomize shortcut."),
+                isParentEnabled));
+
+        spinner.AddHook(new SpinBoxHookRequest(_ =>
+            _config.RandomizerEnabled ? ENABLE_RANDOMIZED_SETTINGS_ON : ENABLE_RANDOMIZED_SETTINGS_OFF));
+
+        var disableItem = new UICustomElementRequestNode(
+            ENABLE_RANDOMIZED_SETTINGS_OFF,
+            new SpinnerItemTextInitializer(new CustomMessage("Disabled")));
+        disableItem.AddHook(new FunctionHookRequest((_, _, _) =>
+        {
+            SetRandomizerEnabled(false);
+            ModConfig.Save();
+            return false;
+        }));
+
+        var enableItem = new UICustomElementRequestNode(
+            ENABLE_RANDOMIZED_SETTINGS_ON,
+            new SpinnerItemTextInitializer(new CustomMessage(EnabledOptionLabel)));
+        enableItem.AddHook(new FunctionHookRequest((_, _, _) =>
+        {
+            SetRandomizerEnabled(true);
+            ModConfig.Save();
+            return false;
+        }));
+
+        spinner.AddChildren([disableItem, enableItem]);
+        return [spinner];
+    }
+
     public override void Init()
     {
-        // add the randomized features here
-        LoadFeatures();
+        if (_isInitialized) return;
+        _isInitialized = true;
 
         _isRandomizerEnabled = false;
 
         foreach (var feature in randomizableFeatures)
         {
+            feature.SetRandomizerEnabled(_config.RandomizerEnabled);
             feature.Init();
             feature.OnEnabledStateChanged += UpdateIsRandomizerEnabled;
 
             _isRandomizerEnabled |= feature.IsRandomizedEnabled;
         }
+
+        _isRandomizerEnabled &= _config.RandomizerEnabled;
+
+        if (_config.RandomizerEnabled)
+            RegisterRandomizerButtonAndShortcut();
+    }
+
+    private void RegisterRandomizerButtonAndShortcut()
+    {
+        if (_randomizerButton != null) return;
 
         using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
 
@@ -112,43 +169,79 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
         try
         {
             PauseMenuManager.RegisterModification([1], appendButtonReq);
+            ModificationRequests.Add(appendButtonReq);
         }
         catch (Exception ex)
         {
             API.LogError($"Error registering modifications: {ex.Message}");
         }
+    }
 
-        ModificationRequests.Add(appendButtonReq);
+    private void UnregisterRandomizerButtonAndShortcut()
+    {
+        base.Unload();
+        _randomizerButton = null;
+
+        if (_randomizerResetShortcutId != null)
+        {
+            ShortcutManager.UnregisterShortcut(_randomizerResetShortcutId.Value);
+            _randomizerResetShortcutId = null;
+        }
+    }
+
+    private void SetRandomizerEnabled(bool enabled)
+    {
+        if (_config.RandomizerEnabled == enabled) return;
+        _config.RandomizerEnabled = enabled;
+
+        if (!_isInitialized) return;
+
+        foreach (var feature in randomizableFeatures)
+            feature.SetRandomizerEnabled(enabled);
+
+        _isRandomizerEnabled = enabled && randomizableFeatures.Any(f => f.IsRandomizedEnabled);
+
+        if (enabled)
+            RegisterRandomizerButtonAndShortcut();
+        else
+            UnregisterRandomizerButtonAndShortcut();
     }
 
     private void RandomizeFeatures()
     {
+        if (!_config.RandomizerEnabled) return;
         foreach (var feature in randomizableFeatures) feature.Randomize();
     }
 
     private void UpdateIsRandomizerEnabled()
     {
-        _isRandomizerEnabled = randomizableFeatures.Any(f => f.IsRandomizedEnabled);
+        _isRandomizerEnabled = _config.RandomizerEnabled && randomizableFeatures.Any(f => f.IsRandomizedEnabled);
 
-        var menuData = _randomizerButton?.GetBuiltElement() ??
-                       throw new InvalidOperationException("Couldn't retrieve the randomizer button UI element");
+        if (_randomizerButton == null) return;
 
-        menuData.IsEnabled = _isRandomizerEnabled;
+        try
+        {
+            var menuData = _randomizerButton.GetBuiltElement();
+            menuData.IsEnabled = _isRandomizerEnabled;
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"Couldn't update the randomizer button enabled state: {ex.Message}");
+        }
     }
 
     public override void Unload()
     {
-        base.Unload();
+        if (!_isInitialized) return;
+        _isInitialized = false;
+
+        UnregisterRandomizerButtonAndShortcut();
+
         foreach (var feature in randomizableFeatures)
         {
             feature.OnEnabledStateChanged -= UpdateIsRandomizerEnabled;
             feature.Unload();
         }
-
-        if (_randomizerResetShortcutId != null)
-            ShortcutManager.UnregisterShortcut(_randomizerResetShortcutId.Value);
-
-        randomizableFeatures.Clear();
     }
 
     [JsonSourceGenerationOptions(
@@ -161,6 +254,7 @@ public partial class RandomizerManager : TrainingFeatureBase<RandomizerManager>
 
     private class Config
     {
+        public bool RandomizerEnabled { get; set; } = true;
         public uint Button { get; set; } = (uint)via.hid.GamePadButton.None;
         public uint Key { get; set; } = (uint)via.hid.KeyboardKey.None;
         public bool IsFunc { get; set; }

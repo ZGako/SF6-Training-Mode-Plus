@@ -23,6 +23,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
     private static readonly Guid HP_P2_RANDOMIZER_LOWER_BOUND = Guid.NewGuid();
 
     private static Config _config = new();
+    private bool _isInitialized;
+    private bool _isUiRegistered;
 
     private HealthBar()
     {
@@ -39,7 +41,7 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
         set
         {
             _config.EnabledP1 = value;
-            IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
+            IsRandomizedEnabled = IsRandomizerFeatureEnabled && (_config.EnabledP1 || _config.EnabledP2);
         }
     }
 
@@ -49,12 +51,51 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
         set
         {
             _config.EnabledP2 = value;
-            IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
+            IsRandomizedEnabled = IsRandomizerFeatureEnabled && (_config.EnabledP1 || _config.EnabledP2);
         }
     }
 
     public override void Init()
     {
+        if (_isInitialized) return;
+        _isInitialized = true;
+
+        if (IsRandomizerFeatureEnabled)
+            RegisterUi();
+        else
+            IsRandomizedEnabled = false;
+    }
+
+    protected override void OnRandomizerEnabledChanged(bool enabled)
+    {
+        if (!_isInitialized) return;
+
+        if (enabled)
+            RegisterUi();
+        else
+            UnregisterUi();
+    }
+
+    public override void Unload()
+    {
+        if (!_isInitialized) return;
+        _isInitialized = false;
+        UnregisterUi();
+    }
+
+    private void UnregisterUi()
+    {
+        if (!_isUiRegistered) return;
+        _isUiRegistered = false;
+        IsRandomizedEnabled = false;
+        base.Unload();
+    }
+
+    private void RegisterUi()
+    {
+        if (_isUiRegistered) return;
+        _isUiRegistered = true;
+
         IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
 
         using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
@@ -265,6 +306,8 @@ public partial class HealthBar : RandomizableFeatureBase<HealthBar>
 
     public override void Randomize()
     {
+        if (!_isInitialized || !IsRandomizerFeatureEnabled) return;
+
         var tm = GameSingletonManager.TrainingManager!;
 
         if (EnabledP1)

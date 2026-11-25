@@ -553,7 +553,7 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     private void UpdateRandomizedEnabledState()
     {
-        IsRandomizedEnabled = _activeGauges.Any(IsGaugeRandomizerEnabled);
+        IsRandomizedEnabled = IsRandomizerFeatureEnabled && _activeGauges.Any(IsGaugeRandomizerEnabled);
     }
 
     private void ClearActiveUI()
@@ -808,6 +808,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
                 _slotInitialTimerNodes[slot] = initialValueSlider;
 
+                if (!IsRandomizerFeatureEnabled)
+                    return [initialValueSlider];
+
                 var randomizerToggle = CreateRandomizerToggleSpinner(slot, gauge, slotGuids);
 
                 var probabilitySlider = CreateActivationProbabilitySlider(
@@ -852,6 +855,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
             case UniqueGaugeCategory.Powerup:
             {
+                if (!IsRandomizerFeatureEnabled)
+                    return [];
+
                 var randomizerToggle = CreateRandomizerToggleSpinner(slot, gauge, slotGuids);
 
                 var probabilitySlider = CreateActivationProbabilitySlider(
@@ -866,6 +872,9 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
             case UniqueGaugeCategory.Stock:
             {
+                if (!IsRandomizerFeatureEnabled)
+                    return [];
+
                 var randomizerToggle = CreateRandomizerToggleSpinner(slot, gauge, slotGuids);
 
                 var upperBoundSpinner = new UICustomElementRequestNode(slotGuids.UpperBoundElement,
@@ -988,6 +997,8 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     public override void Init()
     {
+        if (_isInitialized) return;
+
         var tm = GameSingletonManager.TrainingManager!;
 
         try
@@ -1005,13 +1016,27 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
         }
     }
 
+    protected override void OnRandomizerEnabledChanged(bool enabled)
+    {
+        if (!_isInitialized) return;
+
+        var tm = GameSingletonManager.TrainingManager;
+        if (tm == null) return;
+
+        _activeP1FighterId = -1;
+        _activeP2FighterId = -1;
+
+        if (TryEnsureUniqueGaugesParsed(tm, "RandomizerToggle"))
+            RefreshActiveCharacterUI(tm);
+    }
+
     public override void Unload()
     {
+        if (!_isInitialized) return;
+
         _isInitialized = false;
         _activeP1FighterId = -1;
         _activeP2FighterId = -1;
-        _pendingP1FighterId = -1;
-        _pendingP2FighterId = -1;
         IsRandomizedEnabled = false;
 
         ClearActiveUI();
@@ -1020,7 +1045,8 @@ public partial class UniqueParameters : RandomizableFeatureBase<UniqueParameters
 
     public override void Randomize()
     {
-        if (!IsRandomizedEnabled || _activeGauges.Count == 0) return;
+        if (!_isInitialized || !IsRandomizerFeatureEnabled || !IsRandomizedEnabled || _activeGauges.Count == 0)
+            return;
 
         var paramFunc = GameSingletonManager.TrainingManager?.ParamFunc;
         if (paramFunc == null) return;

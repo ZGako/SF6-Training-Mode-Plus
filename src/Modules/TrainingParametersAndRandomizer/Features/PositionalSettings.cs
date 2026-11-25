@@ -74,6 +74,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     ];
 
     private static Config _config = new();
+    private static bool _isInitialized;
 
     private static ScreenPositionType _initialScreenPosition = ScreenPositionType.Center;
     private static int _initialScreenPositionValue;
@@ -131,9 +132,10 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private void UpdateRandomizedEnabledState()
     {
-        IsRandomizedEnabled = _config.EnabledRelativePositionRandomizer ||
-                              _config.EnabledScreenPositionRandomizer ||
-                              _config.EnabledSideRandomizer;
+        IsRandomizedEnabled = IsRandomizerFeatureEnabled &&
+                              (_config.EnabledRelativePositionRandomizer ||
+                               _config.EnabledScreenPositionRandomizer ||
+                               _config.EnabledSideRandomizer);
     }
 
     private static string FormatUnits(int value)
@@ -228,6 +230,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         MethodHookType.Post)]
     public static void OnStartMenu(ref ulong _)
     {
+        if (!_isInitialized) return;
+
         GetCurrentScreenPosition(null!);
         GetCurrentRelativePosition(null!);
 
@@ -240,6 +244,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     [MethodHook(typeof(app.training.UITrainingMenu), "OnCancelStart()", MethodHookType.Pre)]
     public static PreHookResult OnCancelStart(Span<ulong> _)
     {
+        if (!_isInitialized) return PreHookResult.Continue;
+
         var screenPosChanged = CurrentScreenPosition != _initialScreenPosition ||
                                CurrentScreenPosition.Value != _initialScreenPositionValue;
 
@@ -261,6 +267,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     [MethodHook(typeof(app.training.tf_ShortCutSetting), "_UpdatePositionReset()", MethodHookType.Pre)]
     public static PreHookResult OnShortcutUpdatePositionReset(Span<ulong> _)
     {
+        if (!_isInitialized) return PreHookResult.Continue;
+
         _shortcutResetPending = true;
         return PreHookResult.Continue;
     }
@@ -268,6 +276,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     [MethodHook(typeof(app.training.tf_SelectMenu.FuncData), "RestartGame(System.Boolean)", MethodHookType.Pre)]
     public static PreHookResult OnRestartGame(Span<ulong> _)
     {
+        if (!_isInitialized) return PreHookResult.Continue;
+
         // consume the flag
         if (!_shortcutResetPending) return PreHookResult.Continue;
         _shortcutResetPending = false;
@@ -314,6 +324,11 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     public override void Init()
     {
+        if (_isInitialized) return;
+        _isInitialized = true;
+
+        var includeRandomizer = IsRandomizerFeatureEnabled;
+
         if (_config.RelativeRandomizerUsePresets)
             SyncRelativeUnitsFromPresets();
         else
@@ -352,17 +367,18 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             return false;
         }));
 
-        relativePosSpinner.AddHook(new OptionXHookRequest((baseParam, _, _) =>
-        {
-            OpeningRandomizerSubmenu = true;
-            GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
-                baseParam);
-            GameSingletonManager.TrainingManager?.RequestSE(
-                app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
-                0);
+        if (includeRandomizer)
+            relativePosSpinner.AddHook(new OptionXHookRequest((baseParam, _, _) =>
+            {
+                OpeningRandomizerSubmenu = true;
+                GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                    baseParam);
+                GameSingletonManager.TrainingManager?.RequestSE(
+                    app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                    0);
 
-            return false;
-        }));
+                return false;
+            }));
 
         relativePosSpinner.AddHook(new SpinBoxHookRequest(GetCurrentRelativePosition));
 
@@ -382,18 +398,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
             if (funcType != selectedChildFuncType) return false;
             OpeningRandomizerSubmenu = false;
-            GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
-                baseParam);
-            GameSingletonManager.TrainingManager?.RequestSE(
-                app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
-                0);
-
-            return false;
-        });
-
-        var screenPosOptionXHook = new OptionXHookRequest((baseParam, _, _) =>
-        {
-            OpeningRandomizerSubmenu = true;
             GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
                 baseParam);
             GameSingletonManager.TrainingManager?.RequestSE(
@@ -423,40 +427,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             return false;
         });
 
-        var centerScreenInputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
-        var rightScreenInputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
-        var leftScreenInputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
-
-        var centerScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest(
-                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
-        var rightScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest(
-                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
-        var leftScreenSubmenuReq =
-            new PauseMenuAppendElementsRequest(
-                [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
-
-        var sideOptionXHook = new OptionXHookRequest((baseParam, _, _) =>
-        {
-            OpeningRandomizerSubmenu = true;
-            GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
-                baseParam);
-            GameSingletonManager.TrainingManager?.RequestSE(
-                app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
-                0);
-
-            return false;
-        });
-
-        var side0InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
-        var side1InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
-
-        var side0SubmenuReq =
-            new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
-        var side1SubmenuReq =
-            new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
-
         try
         {
             PauseMenuManager.RegisterModification([1], appendRelativeReq);
@@ -470,20 +440,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             PauseMenuManager.RegisterModification([1, 1, 2], leftScreenHook);
             ModificationRequests.Add(leftScreenHook);
 
-            PauseMenuManager.RegisterModification([1, 1, 0], centerScreenInputGuideHook);
-            ModificationRequests.Add(centerScreenInputGuideHook);
-            PauseMenuManager.RegisterModification([1, 1, 1], rightScreenInputGuideHook);
-            ModificationRequests.Add(rightScreenInputGuideHook);
-            PauseMenuManager.RegisterModification([1, 1, 2], leftScreenInputGuideHook);
-            ModificationRequests.Add(leftScreenInputGuideHook);
-
-            PauseMenuManager.RegisterModification([1, 1, 0], centerScreenSubmenuReq);
-            ModificationRequests.Add(centerScreenSubmenuReq);
-            PauseMenuManager.RegisterModification([1, 1, 1], rightScreenSubmenuReq);
-            ModificationRequests.Add(rightScreenSubmenuReq);
-            PauseMenuManager.RegisterModification([1, 1, 2], leftScreenSubmenuReq);
-            ModificationRequests.Add(leftScreenSubmenuReq);
-
             // ScreenPosition spinner modifications
             PauseMenuManager.RegisterModification([1, 1], screenPosReorderReq);
             ModificationRequests.Add(screenPosReorderReq);
@@ -493,26 +449,111 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             ModificationRequests.Add(screenPosSpinInitHook);
             PauseMenuManager.RegisterModification([1, 1], screenPosOptionYHook);
             ModificationRequests.Add(screenPosOptionYHook);
-            PauseMenuManager.RegisterModification([1, 1], screenPosOptionXHook);
-            ModificationRequests.Add(screenPosOptionXHook);
 
-            PauseMenuManager.RegisterModification([1, 2, 0], side0InputGuideHook);
-            ModificationRequests.Add(side0InputGuideHook);
-            PauseMenuManager.RegisterModification([1, 2, 1], side1InputGuideHook);
-            ModificationRequests.Add(side1InputGuideHook);
+            if (includeRandomizer)
+            {
+                var screenPosOptionXHook = new OptionXHookRequest((baseParam, _, _) =>
+                {
+                    OpeningRandomizerSubmenu = true;
+                    GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                        baseParam);
+                    GameSingletonManager.TrainingManager?.RequestSE(
+                        app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                        0);
 
-            PauseMenuManager.RegisterModification([1, 2, 0], side0SubmenuReq);
-            ModificationRequests.Add(side0SubmenuReq);
-            PauseMenuManager.RegisterModification([1, 2, 1], side1SubmenuReq);
-            ModificationRequests.Add(side1SubmenuReq);
+                    return false;
+                });
 
-            PauseMenuManager.RegisterModification([1, 2], sideOptionXHook);
-            ModificationRequests.Add(sideOptionXHook);
+                var centerScreenInputGuideHook =
+                    new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+                var rightScreenInputGuideHook =
+                    new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+                var leftScreenInputGuideHook =
+                    new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+
+                var centerScreenSubmenuReq =
+                    new PauseMenuAppendElementsRequest(
+                        [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
+                var rightScreenSubmenuReq =
+                    new PauseMenuAppendElementsRequest(
+                        [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
+                var leftScreenSubmenuReq =
+                    new PauseMenuAppendElementsRequest(
+                        [.. CreateScreenPositionRandomizerSubmenuElements().Select(e => (-1, e))]);
+
+                var sideOptionXHook = new OptionXHookRequest((baseParam, _, _) =>
+                {
+                    OpeningRandomizerSubmenu = true;
+                    GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                        baseParam);
+                    GameSingletonManager.TrainingManager?.RequestSE(
+                        app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                        0);
+
+                    return false;
+                });
+
+                var side0InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+                var side1InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX);
+
+                var side0SubmenuReq =
+                    new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
+                var side1SubmenuReq =
+                    new PauseMenuAppendElementsRequest([(-1, CreateSideRandomizerSubmenuElement())]);
+
+                PauseMenuManager.RegisterModification([1, 1, 0], centerScreenInputGuideHook);
+                ModificationRequests.Add(centerScreenInputGuideHook);
+                PauseMenuManager.RegisterModification([1, 1, 1], rightScreenInputGuideHook);
+                ModificationRequests.Add(rightScreenInputGuideHook);
+                PauseMenuManager.RegisterModification([1, 1, 2], leftScreenInputGuideHook);
+                ModificationRequests.Add(leftScreenInputGuideHook);
+
+                PauseMenuManager.RegisterModification([1, 1, 0], centerScreenSubmenuReq);
+                ModificationRequests.Add(centerScreenSubmenuReq);
+                PauseMenuManager.RegisterModification([1, 1, 1], rightScreenSubmenuReq);
+                ModificationRequests.Add(rightScreenSubmenuReq);
+                PauseMenuManager.RegisterModification([1, 1, 2], leftScreenSubmenuReq);
+                ModificationRequests.Add(leftScreenSubmenuReq);
+
+                PauseMenuManager.RegisterModification([1, 1], screenPosOptionXHook);
+                ModificationRequests.Add(screenPosOptionXHook);
+
+                PauseMenuManager.RegisterModification([1, 2, 0], side0InputGuideHook);
+                ModificationRequests.Add(side0InputGuideHook);
+                PauseMenuManager.RegisterModification([1, 2, 1], side1InputGuideHook);
+                ModificationRequests.Add(side1InputGuideHook);
+
+                PauseMenuManager.RegisterModification([1, 2, 0], side0SubmenuReq);
+                ModificationRequests.Add(side0SubmenuReq);
+                PauseMenuManager.RegisterModification([1, 2, 1], side1SubmenuReq);
+                ModificationRequests.Add(side1SubmenuReq);
+
+                PauseMenuManager.RegisterModification([1, 2], sideOptionXHook);
+                ModificationRequests.Add(sideOptionXHook);
+            }
         }
         catch (Exception e)
         {
             API.LogError($"Positional settings initialization failed: {e.Message}");
         }
+    }
+
+    protected override void OnRandomizerEnabledChanged(bool enabled)
+    {
+        if (!_isInitialized) return;
+        Unload();
+        Init();
+    }
+
+    public override void Unload()
+    {
+        if (!_isInitialized) return;
+        _isInitialized = false;
+        OpeningRandomizerSubmenu = false;
+        IsRandomizedEnabled = false;
+        _relativeRandomizerDependentNodes.Clear();
+        _screenRandomizerDependentNodes.Clear();
+        base.Unload();
     }
 
     private UICustomElementRequestNode CreateSideRandomizerSubmenuElement()
@@ -847,11 +888,12 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             newElements.Add((2, customScreenElement));
         }
 
-        foreach (var (_, element) in newElements)
-        {
-            element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
-            element.AddChildren([.. CreateScreenPositionRandomizerSubmenuElements()]);
-        }
+        if (IsRandomizerFeatureEnabled)
+            foreach (var (_, element) in newElements)
+            {
+                element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
+                element.AddChildren([.. CreateScreenPositionRandomizerSubmenuElements()]);
+            }
 
         return newElements;
     }
@@ -926,12 +968,13 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         }
 
         // construct all the in common submenus
-        foreach (var element in newElements)
-        {
-            // input guide thing
-            element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
-            element.AddChildren([.. CreateRelativePositionRandomizerSubmenuElements()]);
-        }
+        if (IsRandomizerFeatureEnabled)
+            foreach (var element in newElements)
+            {
+                // input guide thing
+                element.AddHook(new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX));
+                element.AddChildren([.. CreateRelativePositionRandomizerSubmenuElements()]);
+            }
 
         return newElements;
     }
@@ -1094,6 +1137,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     public override void Randomize()
     {
+        if (!_isInitialized || !IsRandomizerFeatureEnabled) return;
+
         var tm = GameSingletonManager.TrainingManager!;
 
         if (EnabledSideRandomizer)

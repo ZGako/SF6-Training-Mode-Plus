@@ -1,6 +1,7 @@
-﻿using System.Reflection;
+using System.Reflection;
 using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
+using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
 
 namespace SF6_TMP.Modules.TrainingParametersAndRandomizer.Core;
 
@@ -9,12 +10,19 @@ public interface ITrainingFeatureBase
     public void Init();
 
     public void Unload();
+
+    public System.Collections.Generic.IReadOnlyList<UICustomElementRequestNode> CreateSettingsUINodes(
+        bool isParentEnabled)
+    {
+        return [];
+    }
 }
 
 public interface IRandomizableFeatureBase : ITrainingFeatureBase
 {
     public bool IsRandomizedEnabled { get; }
     public void Randomize();
+    public void SetRandomizerEnabled(bool enabled);
     public event Action? OnEnabledStateChanged;
 }
 
@@ -31,17 +39,28 @@ public abstract class TrainingFeatureBase<T> : ITrainingFeatureBase
 
     public virtual void Unload()
     {
+        UnregisterRequests(ModificationRequests);
+    }
+
+    protected static void UnregisterRequests(List<IUIModificationRequest> requests)
+    {
         try
         {
-            if (ModificationRequests.Count <= 0) return;
-            foreach (var request in ModificationRequests)
+            if (requests.Count <= 0) return;
+            foreach (var request in requests)
                 PauseMenuManager.UnregisterModification(request);
-            ModificationRequests.Clear();
+            requests.Clear();
         }
         catch (Exception ex)
         {
             API.LogError($"Error unregistering UI modifications during unload: {ex.Message}");
         }
+    }
+
+    public virtual System.Collections.Generic.IReadOnlyList<UICustomElementRequestNode> CreateSettingsUINodes(
+        bool isParentEnabled)
+    {
+        return [];
     }
 
     private static T CreateInstance()
@@ -71,6 +90,8 @@ public abstract class TrainingFeatureBase<T> : ITrainingFeatureBase
 public abstract class RandomizableFeatureBase<T> : TrainingFeatureBase<T>, IRandomizableFeatureBase
     where T : RandomizableFeatureBase<T>
 {
+    protected bool IsRandomizerFeatureEnabled { get; private set; } = true;
+
     public bool IsRandomizedEnabled
     {
         get;
@@ -83,6 +104,17 @@ public abstract class RandomizableFeatureBase<T> : TrainingFeatureBase<T>, IRand
     }
 
     public abstract void Randomize();
+
+    public void SetRandomizerEnabled(bool enabled)
+    {
+        if (IsRandomizerFeatureEnabled == enabled) return;
+        IsRandomizerFeatureEnabled = enabled;
+        OnRandomizerEnabledChanged(enabled);
+    }
+
+    protected virtual void OnRandomizerEnabledChanged(bool enabled)
+    {
+    }
 
     public event Action? OnEnabledStateChanged;
 }

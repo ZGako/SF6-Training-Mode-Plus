@@ -29,6 +29,7 @@ public class GameSpeedPlus : ITrainingModePlusModule
     private static CustomMessage? _newMessage;
 
     private readonly List<IUIModificationRequest> _modificationRequests = [];
+    private bool _isInitialized;
 
     private GameSpeedPlus()
     {
@@ -36,8 +37,15 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
     public static GameSpeedPlus Instance { get; private set; } = new();
 
+    public string ConfigKey => nameof(GameSpeedPlus);
+    public string DisplayName => "Game Speed Plus";
+    public string Description => "Enable or disable extended game speed options in the Environment tab.";
+
     public void Init()
     {
+        if (_isInitialized) return;
+        _isInitialized = true;
+
         API.LogInfo("Initializing GameSpeedPlus module...");
 
         // reorder to: Pause, 50%, Standard
@@ -83,6 +91,9 @@ public class GameSpeedPlus : ITrainingModePlusModule
 
     public void Unload()
     {
+        if (!_isInitialized) return;
+        _isInitialized = false;
+
         API.LogInfo("Unloading GameSpeedPlus module...");
         if (_modificationRequests.Count > 0)
         {

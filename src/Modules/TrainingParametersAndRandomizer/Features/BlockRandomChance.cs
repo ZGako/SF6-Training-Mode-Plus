@@ -1,4 +1,4 @@
-﻿using SF6_Plugin_Core.Services;
+using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
@@ -12,6 +12,7 @@ public class RandomBlockChance : TrainingFeatureBase<RandomBlockChance>
     private static readonly List<int> PathToBlockRow = [2, 0, 0, 2];
 
     private static readonly Guid RANDOM_BLOCK_CHANCE_SPINNER = Guid.NewGuid();
+    private bool _isInitialized;
 
     private RandomBlockChance()
     {
@@ -25,6 +26,9 @@ public class RandomBlockChance : TrainingFeatureBase<RandomBlockChance>
 
     public override void Init()
     {
+        if (_isInitialized) return;
+        _isInitialized = true;
+
         using var _ = LocalizationManager.UseFileScope("TrainingModePlus");
         var changeToGuidTypeReq = new FieldOverrideRequest
         {
@@ -88,5 +92,12 @@ public class RandomBlockChance : TrainingFeatureBase<RandomBlockChance>
         ModificationRequests.Add(appendReq);
         ModificationRequests.Add(optionYHook);
         ModificationRequests.Add(changeParentsGuideReq);
+    }
+
+    public override void Unload()
+    {
+        if (!_isInitialized) return;
+        _isInitialized = false;
+        base.Unload();
     }
 }

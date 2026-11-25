@@ -41,7 +41,6 @@ public static class TrainingModePlus
         LocalizationManager.LoadTranslations(LocalizationFilePath, "TrainingModePlus");
 
         Modules.Add(GameSpeedPlus.Instance);
-        // Modules.Add(TestingRefactor.Instance);
         Modules.Add(TrainingParametersAndRandomizer.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
@@ -51,6 +50,7 @@ public static class TrainingModePlus
 
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
 
+        SettingsTabManager.EnsureConfigBound();
         ModConfig.Load();
     }
 
@@ -58,7 +58,11 @@ public static class TrainingModePlus
     {
         API.LogInfo("TrainingManager initialized!");
         ModConfig.Load();
-        foreach (var module in Modules) module.Init();
+        foreach (var module in Modules)
+            if (SettingsTabManager.IsModuleEnabled(module))
+                module.Init();
+
+        SettingsTabManager.Init(Modules);
     }
 
     private static void OnTrainingManagerRelease()
@@ -84,6 +88,7 @@ public static class TrainingModePlus
         try
         {
             CleanUpTrainingState();
+            SettingsTabManager.Clear();
             ModConfig.Clear();
         }
         catch (Exception ex)
@@ -98,6 +103,8 @@ public static class TrainingModePlus
 
     private static void CleanUpTrainingState()
     {
+        SettingsTabManager.Unload();
+
         foreach (var module in Modules)
             try
             {

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.Helpers;
+using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.Core;
 using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
@@ -67,6 +68,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
     private static bool _isInitialized;
 
     private static Config _config = new();
+    private readonly List<IUIModificationRequest> _modeModificationRequests = [];
 
     [ThreadStatic] private static int s_updateDriveNormalDepth;
     [ThreadStatic] private static int s_updateDriveTimerRecoveryDepth;
@@ -86,7 +88,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         set
         {
             _config.EnabledP1 = value;
-            IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
+            IsRandomizedEnabled = IsRandomizerFeatureEnabled && (_config.EnabledP1 || _config.EnabledP2);
         }
     }
 
@@ -96,7 +98,7 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         set
         {
             _config.EnabledP2 = value;
-            IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
+            IsRandomizedEnabled = IsRandomizerFeatureEnabled && (_config.EnabledP1 || _config.EnabledP2);
         }
     }
 
@@ -142,37 +144,16 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
     public override void Init()
     {
+        if (_isInitialized) return;
+
         _config.LowerBoundP1 = Math.Clamp(_config.LowerBoundP1, MinRawBound, MaxRawBound);
         _config.UpperBoundP1 = Math.Clamp(_config.UpperBoundP1, _config.LowerBoundP1, MaxRawBound);
         _config.LowerBoundP2 = Math.Clamp(_config.LowerBoundP2, MinRawBound, MaxRawBound);
         _config.UpperBoundP2 = Math.Clamp(_config.UpperBoundP2, _config.LowerBoundP2, MaxRawBound);
 
-        IsRandomizedEnabled = _config.EnabledP1 || _config.EnabledP2;
-
         TryCacheBattleObjects();
         _isInitialized = true;
-
-        // Drive bar P1
-        var fieldOverrideP1 = new FieldOverrideRequest
-        {
-            GuideMessage = new CustomMessage(
-                "Adjust P1's Drive Gauge. Use <INPT id=\"UI_X\" type=\"dc\"> to adjust the randomizer settings. " +
-                "Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision.")
-        };
-
-        var submenuOpenHookP1 = new OptionXHookRequest((baseParam, viewData, _) =>
-        {
-            if (viewData.Data.FuncType == app.training.TrainingFuncType.PARAMETER_DRIVE_GAUGE_1P)
-            {
-                GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
-                    baseParam);
-                GameSingletonManager.TrainingManager?.RequestSE(
-                    app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
-                    0);
-            }
-
-            return false;
-        });
+        IsRandomizedEnabled = IsRandomizerFeatureEnabled && (_config.EnabledP1 || _config.EnabledP2);
 
         var toggleDriveTypeP1 = new OptionSelectHookRequest((_, _, _) =>
         {
@@ -182,34 +163,6 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
         var functionHookP1 = CreateDriveGaugeFunctionHook(0);
 
-        var submenuP1InputGuideHook = new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX,
-            app.InputAssign.Digital.Id.UITrainingOptionBack, xPos: 595F);
-
-        var appendChildP1Req = new PauseMenuAppendElementsRequest(
-            [.. CreateRandomizerSubmenuElements(true).Select(e => (-1, e))]);
-
-        // Drive bar P2
-        var fieldOverrideP2 = new FieldOverrideRequest
-        {
-            GuideMessage = new CustomMessage(
-                "Adjust P2's Drive Gauge. Use <INPT id=\"UI_X\" type=\"dc\"> to adjust the randomizer settings. " +
-                "Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision.")
-        };
-
-        var submenuOpenHookP2 = new OptionXHookRequest((baseParam, viewData, _) =>
-        {
-            if (viewData.Data.FuncType == app.training.TrainingFuncType.PARAMETER_DRIVE_GAUGE_2P)
-            {
-                GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
-                    baseParam);
-                GameSingletonManager.TrainingManager?.RequestSE(
-                    app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
-                    0);
-            }
-
-            return false;
-        });
-
         var toggleDriveTypeP2 = new OptionSelectHookRequest((_, _, _) =>
         {
             ToggleDriveGaugeType(1);
@@ -218,25 +171,15 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
         var functionHookP2 = CreateDriveGaugeFunctionHook(1);
 
-        var submenuP2InputGuideHook = submenuP1InputGuideHook.Clone();
-
-        var appendChildP2Req = new PauseMenuAppendElementsRequest(
-            [.. CreateRandomizerSubmenuElements(false).Select(e => (-1, e))]);
-
         try
         {
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, fieldOverrideP1);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, submenuOpenHookP1);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, submenuP1InputGuideHook);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, appendChildP1Req);
             PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, toggleDriveTypeP1);
+            ModificationRequests.Add(toggleDriveTypeP1);
             PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, functionHookP1);
+            ModificationRequests.Add(functionHookP1);
 
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, fieldOverrideP2);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, submenuOpenHookP2);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, submenuP2InputGuideHook);
-            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, appendChildP2Req);
             PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, toggleDriveTypeP2);
+            ModificationRequests.Add(toggleDriveTypeP2);
             PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, functionHookP2);
         }
         catch (Exception ex)
@@ -244,24 +187,115 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
             API.LogError($"Exception in DriveGauge: {ex.Message}");
         }
 
-        ModificationRequests.Add(fieldOverrideP1);
-        ModificationRequests.Add(submenuOpenHookP1);
-        ModificationRequests.Add(submenuP1InputGuideHook);
-        ModificationRequests.Add(appendChildP1Req);
-        ModificationRequests.Add(toggleDriveTypeP1);
-        ModificationRequests.Add(functionHookP1);
+        ApplyModeDependentUi();
+    }
 
-        ModificationRequests.Add(fieldOverrideP2);
-        ModificationRequests.Add(submenuOpenHookP2);
-        ModificationRequests.Add(submenuP2InputGuideHook);
-        ModificationRequests.Add(appendChildP2Req);
-        ModificationRequests.Add(toggleDriveTypeP2);
-        ModificationRequests.Add(functionHookP2);
+    private void ClearModeDependentUi()
+    {
+        UnregisterRequests(_modeModificationRequests);
+    }
+
+    private void ApplyModeDependentUi()
+    {
+        ClearModeDependentUi();
+
+        var includeRandomizer = IsRandomizerFeatureEnabled;
+
+        var guideP1Text = includeRandomizer
+            ? "Adjust P1's Drive Gauge. Use <INPT id=\"UI_X\" type=\"dc\"> to adjust the randomizer settings. " +
+              "Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision."
+            : "Adjust P1's Drive Gauge. Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision.";
+
+        var guideP2Text = includeRandomizer
+            ? "Adjust P2's Drive Gauge. Use <INPT id=\"UI_X\" type=\"dc\"> to adjust the randomizer settings. " +
+              "Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision."
+            : "Adjust P2's Drive Gauge. Use <INPT id=\"UI_BACK\" type=\"dc\"> to toggle gauge precision.";
+
+        var fieldOverrideP1 = new FieldOverrideRequest { GuideMessage = new CustomMessage(guideP1Text) };
+        var fieldOverrideP2 = new FieldOverrideRequest { GuideMessage = new CustomMessage(guideP2Text) };
+
+        var submenuP1InputGuideHook = includeRandomizer
+            ? new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionX,
+                app.InputAssign.Digital.Id.UITrainingOptionBack, xPos: 595F)
+            : new CustomInputGuideHookRequest(app.InputAssign.Digital.Id.UITrainingOptionBack);
+        var submenuP2InputGuideHook = submenuP1InputGuideHook.Clone();
+
+        try
+        {
+            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, fieldOverrideP1);
+            _modeModificationRequests.Add(fieldOverrideP1);
+            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, submenuP1InputGuideHook);
+            _modeModificationRequests.Add(submenuP1InputGuideHook);
+
+            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, fieldOverrideP2);
+            _modeModificationRequests.Add(fieldOverrideP2);
+            PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, submenuP2InputGuideHook);
+            _modeModificationRequests.Add(submenuP2InputGuideHook);
+
+            if (includeRandomizer)
+            {
+                var submenuOpenHookP1 = new OptionXHookRequest((baseParam, viewData, _) =>
+                {
+                    if (viewData.Data.FuncType == app.training.TrainingFuncType.PARAMETER_DRIVE_GAUGE_1P)
+                    {
+                        GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                            baseParam);
+                        GameSingletonManager.TrainingManager?.RequestSE(
+                            app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                            0);
+                    }
+
+                    return false;
+                });
+                var appendChildP1Req = new PauseMenuAppendElementsRequest(
+                    [.. CreateRandomizerSubmenuElements(true).Select(e => (-1, e))]);
+
+                var submenuOpenHookP2 = new OptionXHookRequest((baseParam, viewData, _) =>
+                {
+                    if (viewData.Data.FuncType == app.training.TrainingFuncType.PARAMETER_DRIVE_GAUGE_2P)
+                    {
+                        GameSingletonManager.TrainingManager?.OpenMenu(app.training.TrainingManager.MenuType.SPINLIST,
+                            baseParam);
+                        GameSingletonManager.TrainingManager?.RequestSE(
+                            app.training.TrainingManager.SETriggerType.DECIDE_OPTION,
+                            0);
+                    }
+
+                    return false;
+                });
+                var appendChildP2Req = new PauseMenuAppendElementsRequest(
+                    [.. CreateRandomizerSubmenuElements(false).Select(e => (-1, e))]);
+
+                PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, submenuOpenHookP1);
+                _modeModificationRequests.Add(submenuOpenHookP1);
+                PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP1, appendChildP1Req);
+                _modeModificationRequests.Add(appendChildP1Req);
+
+                PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, submenuOpenHookP2);
+                _modeModificationRequests.Add(submenuOpenHookP2);
+                PauseMenuManager.RegisterModification(PathToDriveGaugeSliderP2, appendChildP2Req);
+                _modeModificationRequests.Add(appendChildP2Req);
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception in DriveGauge mode UI setup: {ex.Message}");
+        }
+    }
+
+    protected override void OnRandomizerEnabledChanged(bool enabled)
+    {
+        if (!_isInitialized) return;
+        IsRandomizedEnabled = enabled && (_config.EnabledP1 || _config.EnabledP2);
+        ApplyModeDependentUi();
     }
 
     public override void Unload()
     {
+        if (!_isInitialized) return;
         _isInitialized = false;
+        IsRandomizedEnabled = false;
+        ClearModeDependentUi();
         Array.Clear(BattlePlayers);
         _battleSoundMo = null;
         _battleGameMo = null;
@@ -515,6 +549,8 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
 
     public override void Randomize()
     {
+        if (!_isInitialized || !IsRandomizerFeatureEnabled) return;
+
         var paramFunc = GameSingletonManager.TrainingManager!.ParamFunc;
 
         if (EnabledP1)
@@ -666,6 +702,8 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
     [MethodHook(typeof(app.training.UIFlowTrainingMenu.Param), "InitSlider", MethodHookType.Pre)]
     public static PreHookResult OnInitSliderPre(Span<ulong> args)
     {
+        if (!_isInitialized) return PreHookResult.Continue;
+
         try
         {
             var currentParam = MemoryHelpers.GetAddressAs<app.training.UIFlowTrainingMenu.Param>(args[1]);
@@ -731,6 +769,8 @@ public partial class DriveGauge : RandomizableFeatureBase<DriveGauge>
         MethodHookType.Pre)]
     public static PreHookResult OnUpdateSliderDrivePre(Span<ulong> args)
     {
+        if (!_isInitialized) return PreHookResult.Continue;
+
         try
         {
             var partsGroup = MemoryHelpers.GetAddressAs<app.UIPartsGroup>(args[2]);
