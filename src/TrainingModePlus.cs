@@ -29,6 +29,7 @@ public static class TrainingModePlus
         Path.Combine(DirectoryPath, "SF6_TrainingModePlus_Localization.json");
 
     private static readonly List<ITrainingModePlusModule> Modules = [];
+    private static bool _isTrainingSessionActive;
     private static bool _isUnloaded;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -56,7 +57,23 @@ public static class TrainingModePlus
 
     private static void OnTrainingManagerReady()
     {
+        var tm = GameSingletonManager.TrainingManager;
+        if (tm == null) return;
+
+        var gameMode = tm.GetGameMode();
+        if (gameMode != app.training.TrainingManager.GameMode.TRAINING)
+        {
+            API.LogInfo($"TrainingManager initialized in {gameMode} mode; skipping training-only modules.");
+            return;
+        }
+
         API.LogInfo("TrainingManager initialized!");
+        InitTrainingMode();
+    }
+
+    private static void InitTrainingMode()
+    {
+        _isTrainingSessionActive = true;
         ModConfig.Load();
         foreach (var module in Modules)
             if (SettingsTabManager.IsModuleEnabled(module))
@@ -67,6 +84,8 @@ public static class TrainingModePlus
 
     private static void OnTrainingManagerRelease()
     {
+        if (!_isTrainingSessionActive) return;
+
         CleanUpTrainingState();
         ModConfig.Save();
         API.LogInfo("TrainingManager released. Mod state cleaned up.");
@@ -103,6 +122,9 @@ public static class TrainingModePlus
 
     private static void CleanUpTrainingState()
     {
+        if (!_isTrainingSessionActive) return;
+        _isTrainingSessionActive = false;
+
         SettingsTabManager.Unload();
 
         foreach (var module in Modules)
