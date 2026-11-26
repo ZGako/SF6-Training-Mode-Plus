@@ -73,6 +73,19 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         ("Right", ScreenPositionType.Right)
     ];
 
+    private static readonly TypeDefinition? BattleType = API.GetTDB().FindType("gBattle");
+
+    private static readonly Method? GetBodyPushMethod =
+        nBattle.cPlayer.REFType?.GetMethod("getBodyPush") ?? nBattle.cWork.REFType?.GetMethod("getBodyPush");
+
+    private static readonly Field? HitRectSizeXField = CharacterAsset.HitRect16Base.REFType?.GetField("SizeX");
+    private static readonly Field? HitRectOffsetXField = CharacterAsset.HitRect16Base.REFType?.GetField("OffsetX");
+
+    private static readonly List<(string BaseName, RelativePositionType Type, CustomMessage Message)>
+        RelativePresetMessages = [];
+
+    private static (int Min, int Max, int TotalOffset)? _lastPresetLabelBounds;
+
     private static Config _config = new();
     private static bool _isInitialized;
 
@@ -81,6 +94,12 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     private static RelativePositionType _initialRelativePosition = RelativePositionType.Roundstart;
     private static int _initialRelativePositionValue = 300;
+
+    // set when the training "refresh" shortcut is used, consumed by the next RestartGame call
+    private static bool _shortcutResetPending;
+
+    // the latest (layout, side flip) used with the shortcut + a direction
+    private static (app.EConfigInitLayout StartLocation, bool IsSideFlip)? _lastShortcutUse;
 
     private readonly List<UICustomElementRequestNode> _relativeRandomizerDependentNodes = [];
     private readonly List<UICustomElementRequestNode> _screenRandomizerDependentNodes = [];
@@ -149,47 +168,127 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         return $"{preset.Name} ({FormatUnits(preset.Type.Value)})";
     }
 
+    private static bool TryReadBodyPush(ManagedObject? playerMo, out short sizeX, out short offsetX)
+    {
+        sizeX = 0;
+        offsetX = 0;
+
+        if (GetBodyPushMethod == null || HitRectSizeXField == null || HitRectOffsetXField == null || playerMo == null)
+            return false;
+
+        var playerAddr = playerMo.GetAddress();
+        if (playerAddr == 0 || !ManagedObject.IsManagedObject(playerAddr))
+            return false;
+
+        var pushMo = GetBodyPushMethod.InvokeBoxed(typeof(ManagedObject), playerMo, []) as ManagedObject;
+        if (pushMo == null)
+            return false;
+
+        var pushAddr = pushMo.GetAddress();
+        if (pushAddr == 0 || !ManagedObject.IsManagedObject(pushAddr))
+            return false;
+
+        sizeX = Marshal.ReadInt16((nint)HitRectSizeXField.GetDataRaw(pushAddr, false));
+        offsetX = Marshal.ReadInt16((nint)HitRectOffsetXField.GetDataRaw(pushAddr, false));
+        return sizeX > 0;
+    }
+
+    private static (int MinRelDist, int MaxRelDist, int TotalOffset) GetRelativeDistanceMetrics()
+    {
+        try
+        {
+            var playerMo = BattleType?.Statics?.GetField("Player") as ManagedObject;
+            if (playerMo != null && ManagedObject.IsManagedObject(playerMo.GetAddress()))
+            {
+                var mcPlayerMo = (playerMo as IObject)?.GetField("mcPlayer") as ManagedObject;
+                var playerArray = mcPlayerMo?.As<_System.Array>();
+                if (playerArray is { Length: >= 2 })
+                {
+                    var p1Mo = playerArray[0] as ManagedObject;
+                    var p2Mo = playerArray[1] as ManagedObject;
+                    if (TryReadBodyPush(p1Mo, out var p1SizeX, out var p1OffsetX) &&
+                        TryReadBodyPush(p2Mo, out var p2SizeX, out var p2OffsetX))
+                    {
+                        var minRelDist = p1SizeX + p2SizeX;
+                        var totalOffset = p1OffsetX + p2OffsetX;
+                        var maxRelDist = Math.Max(minRelDist, DefaultMaxRelativeDistance - totalOffset);
+                        return (minRelDist, maxRelDist, totalOffset);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            API.LogWarning($"[PositionalSettings] Failed to resolve player pushbox metrics: {ex.Message}");
+        }
+
+        return (DefaultMinRelativeDistance, DefaultMaxRelativeDistance, 0);
+    }
+
     private static int GetMinRelativeDistance()
     {
-        // TODO: add per-character minimum_distance_offset based on P1 and P2 FighterID
-        return DefaultMinRelativeDistance;
+        return GetRelativeDistanceMetrics().MinRelDist;
     }
 
     private static int GetMaxRelativeDistance()
     {
-        // TODO: subtract per-character position_vs_relative_distance_offset based on P1 and P2 FighterID
-        return DefaultMaxRelativeDistance;
+        return GetRelativeDistanceMetrics().MaxRelDist;
+    }
+
+    private static void RefreshRelativePresetMessages(int minDist, int maxDist, int totalOffset)
+    {
+        var bounds = (minDist, maxDist, totalOffset);
+        if (_lastPresetLabelBounds == bounds || RelativePresetMessages.Count == 0) return;
+
+        _lastPresetLabelBounds = bounds;
+
+        foreach (var (baseName, type, message) in RelativePresetMessages)
+        {
+            var label = $"{baseName} ({FormatUnits(type.ResolveValue(minDist, maxDist, totalOffset))})";
+            for (var lang = 0; lang < (int)via.Language.Max; lang++)
+                message.AddTranslation((via.Language)lang, label);
+            message.ClearCachedEngineStrings();
+        }
+    }
+
+    private static (int Lower, int Upper) GetResolvedRelativeRandomizerBounds(int minDist, int maxDist)
+    {
+        var lowerGap = Math.Max(0, _config.RelativeLowerBoundEdgeGap);
+        var upperGap = Math.Max(lowerGap, _config.RelativeUpperBoundEdgeGap);
+        var lower = Math.Clamp(minDist + lowerGap, minDist, maxDist);
+        var upper = Math.Clamp(minDist + upperGap, lower, maxDist);
+        return (lower, upper);
     }
 
     private static void SyncRelativeUnitsFromPresets()
     {
+        var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
         var lowerIdx = Math.Clamp(_config.RelativeLowerBoundPreset, 0, RelativePresetOptions.Length - 1);
         var upperIdx = Math.Clamp(_config.RelativeUpperBoundPreset, lowerIdx, RelativePresetOptions.Length - 1);
         _config.RelativeLowerBoundPreset = lowerIdx;
         _config.RelativeUpperBoundPreset = upperIdx;
-        _config.RelativeLowerBoundUnits = RelativePresetOptions[lowerIdx].Type.Value;
-        _config.RelativeUpperBoundUnits = RelativePresetOptions[upperIdx].Type.Value;
+        var lowerVal = RelativePresetOptions[lowerIdx].Type.ResolveValue(minDist, maxDist, totalOffset);
+        var upperVal = RelativePresetOptions[upperIdx].Type.ResolveValue(minDist, maxDist, totalOffset);
+        _config.RelativeLowerBoundEdgeGap = Math.Max(0, lowerVal - minDist);
+        _config.RelativeUpperBoundEdgeGap = Math.Max(_config.RelativeLowerBoundEdgeGap, upperVal - minDist);
     }
 
     private static void SyncRelativePresetsFromUnits()
     {
-        var minDist = GetMinRelativeDistance();
-        var maxDist = GetMaxRelativeDistance();
-        _config.RelativeLowerBoundUnits = Math.Clamp(_config.RelativeLowerBoundUnits, minDist, maxDist);
-        _config.RelativeUpperBoundUnits =
-            Math.Clamp(_config.RelativeUpperBoundUnits, _config.RelativeLowerBoundUnits, maxDist);
-        _config.RelativeLowerBoundPreset = GetClosestRelativePresetIndex(_config.RelativeLowerBoundUnits);
-        _config.RelativeUpperBoundPreset = GetClosestRelativePresetIndex(_config.RelativeUpperBoundUnits);
+        var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
+        var (lower, upper) = GetResolvedRelativeRandomizerBounds(minDist, maxDist);
+        _config.RelativeLowerBoundPreset = GetClosestRelativePresetIndex(lower, minDist, maxDist, totalOffset);
+        _config.RelativeUpperBoundPreset = GetClosestRelativePresetIndex(upper, minDist, maxDist, totalOffset);
     }
 
-    private static int GetClosestRelativePresetIndex(int units)
+    private static int GetClosestRelativePresetIndex(int units, int minDist, int maxDist, int totalOffset)
     {
         var bestIndex = 0;
-        var bestDiff = Math.Abs(RelativePresetOptions[0].Type.Value - units);
+        var bestDiff = Math.Abs(RelativePresetOptions[0].Type.ResolveValue(minDist, maxDist, totalOffset) - units);
 
         for (var i = 1; i < RelativePresetOptions.Length; i++)
         {
-            var diff = Math.Abs(RelativePresetOptions[i].Type.Value - units);
+            var diff = Math.Abs(RelativePresetOptions[i].Type.ResolveValue(minDist, maxDist, totalOffset) - units);
             if (diff < bestDiff)
             {
                 bestDiff = diff;
@@ -258,12 +357,6 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         return PreHookResult.Continue;
     }
 
-    // set when the training "refresh" shortcut is used, consumed by the next RestartGame call
-    private static bool _shortcutResetPending;
-
-    // the latest (layout, side flip) used with the shortcut + a direction
-    private static (app.EConfigInitLayout StartLocation, bool IsSideFlip)? _lastShortcutUse;
-
     [MethodHook(typeof(app.training.tf_ShortCutSetting), "_UpdatePositionReset()", MethodHookType.Pre)]
     public static PreHookResult OnShortcutUpdatePositionReset(Span<ulong> _)
     {
@@ -306,7 +399,7 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 return PreHookResult.Continue;
         }
 
-        var current = (startLocation, (bool)selectMenu.Is_Side_Flip);
+        var current = (startLocation, selectMenu.Is_Side_Flip);
 
         if (_lastShortcutUse == current)
         {
@@ -553,6 +646,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         IsRandomizedEnabled = false;
         _relativeRandomizerDependentNodes.Clear();
         _screenRandomizerDependentNodes.Clear();
+        RelativePresetMessages.Clear();
+        _lastPresetLabelBounds = null;
         base.Unload();
     }
 
@@ -740,15 +835,25 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 EnabledRelativePositionRandomizer));
 
         submenuUpperBound.AddHook(new SubMenuSpinnerHookRequest(
-            () => _config.RelativeRandomizerUsePresets
-                ? _config.RelativeUpperBoundPreset
-                : _config.RelativeUpperBoundUnits,
+            () =>
+            {
+                if (_config.RelativeRandomizerUsePresets) return _config.RelativeUpperBoundPreset;
+
+                var (minDist, maxDist, _) = GetRelativeDistanceMetrics();
+                return GetResolvedRelativeRandomizerBounds(minDist, maxDist).Upper;
+            },
             val => _config.RelativeRandomizerUsePresets
                 ? (FormatRelativePreset(val), false)
                 : (FormatUnits(val), false),
-            () => _config.RelativeRandomizerUsePresets
-                ? (_config.RelativeLowerBoundPreset, RelativePresetOptions.Length - 1)
-                : (_config.RelativeLowerBoundUnits, GetMaxRelativeDistance()),
+            () =>
+            {
+                if (_config.RelativeRandomizerUsePresets)
+                    return (_config.RelativeLowerBoundPreset, RelativePresetOptions.Length - 1);
+
+                var (minDist, maxDist, _) = GetRelativeDistanceMetrics();
+                var (lower, _) = GetResolvedRelativeRandomizerBounds(minDist, maxDist);
+                return (lower, maxDist);
+            },
             () => !OpeningRandomizerSubmenu));
 
         submenuUpperBound.AddHook(new FunctionHookRequest((_, _, val) =>
@@ -760,7 +865,9 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             }
             else
             {
-                _config.RelativeUpperBoundUnits = val;
+                var (minDist, _, _) = GetRelativeDistanceMetrics();
+                _config.RelativeUpperBoundEdgeGap =
+                    Math.Max(Math.Max(0, _config.RelativeLowerBoundEdgeGap), val - minDist);
                 SyncRelativePresetsFromUnits();
             }
 
@@ -775,15 +882,25 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 EnabledRelativePositionRandomizer));
 
         submenuLowerBound.AddHook(new SubMenuSpinnerHookRequest(
-            () => _config.RelativeRandomizerUsePresets
-                ? _config.RelativeLowerBoundPreset
-                : _config.RelativeLowerBoundUnits,
+            () =>
+            {
+                if (_config.RelativeRandomizerUsePresets) return _config.RelativeLowerBoundPreset;
+
+                var (minDist, maxDist, _) = GetRelativeDistanceMetrics();
+                return GetResolvedRelativeRandomizerBounds(minDist, maxDist).Lower;
+            },
             val => _config.RelativeRandomizerUsePresets
                 ? (FormatRelativePreset(val), false)
                 : (FormatUnits(val), false),
-            () => _config.RelativeRandomizerUsePresets
-                ? (0, _config.RelativeUpperBoundPreset)
-                : (GetMinRelativeDistance(), _config.RelativeUpperBoundUnits),
+            () =>
+            {
+                if (_config.RelativeRandomizerUsePresets)
+                    return (0, _config.RelativeUpperBoundPreset);
+
+                var (minDist, maxDist, _) = GetRelativeDistanceMetrics();
+                var (_, upper) = GetResolvedRelativeRandomizerBounds(minDist, maxDist);
+                return (minDist, upper);
+            },
             () => !OpeningRandomizerSubmenu));
 
         submenuLowerBound.AddHook(new FunctionHookRequest((_, _, val) =>
@@ -795,7 +912,10 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             }
             else
             {
-                _config.RelativeLowerBoundUnits = val;
+                var (minDist, _, _) = GetRelativeDistanceMetrics();
+                _config.RelativeLowerBoundEdgeGap = Math.Max(0, val - minDist);
+                if (_config.RelativeUpperBoundEdgeGap < _config.RelativeLowerBoundEdgeGap)
+                    _config.RelativeUpperBoundEdgeGap = _config.RelativeLowerBoundEdgeGap;
                 SyncRelativePresetsFromUnits();
             }
 
@@ -901,6 +1021,10 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     private List<UICustomElementRequestNode> CreateRelativeSpinnerItems()
     {
         var newElements = new List<UICustomElementRequestNode>();
+        RelativePresetMessages.Clear();
+
+        var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
+        _lastPresetLabelBounds = (minDist, maxDist, totalOffset);
 
         var speedOptionData = new (Guid functionId, string messageID, RelativePositionType relativePos)[]
         {
@@ -916,8 +1040,14 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
         foreach (var (functionId, messageId, relativePos) in speedOptionData)
         {
-            var newElement = new UICustomElementRequestNode(functionId,
-                new SpinnerItemTextInitializer(new CustomMessage($"{messageId} ({FormatUnits(relativePos.Value)})")));
+            var message =
+                new CustomMessage(
+                    $"{messageId} ({FormatUnits(relativePos.ResolveValue(minDist, maxDist, totalOffset))})");
+            RelativePresetMessages.Add((messageId, relativePos, message));
+
+            var newElement = new UICustomElementRequestNode(
+                functionId,
+                new SpinnerItemTextInitializer(message));
 
             newElement.AddHook(new FunctionHookRequest((_, _, _) =>
             {
@@ -949,9 +1079,18 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                     (DefaultMinRelativeDistance, DefaultMaxRelativeDistance)));
 
             submenuCustom.AddHook(new SubMenuSpinnerHookRequest(
-                () => _config.CustomRelativePosValue,
+                () =>
+                {
+                    var (currMin, currMax, _) = GetRelativeDistanceMetrics();
+                    _config.CustomRelativePosValue = Math.Clamp(_config.CustomRelativePosValue, currMin, currMax);
+                    return _config.CustomRelativePosValue;
+                },
                 val => (FormatUnits(val), false),
-                null,
+                () =>
+                {
+                    var (currMin, currMax, _) = GetRelativeDistanceMetrics();
+                    return (currMin, currMax);
+                },
                 () => OpeningRandomizerSubmenu
             ));
 
@@ -983,6 +1122,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
     {
         // here we get the current positional values, and set it based on that.
         var tm = GameSingletonManager.TrainingManager!;
+        var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
+        RefreshRelativePresetMessages(minDist, maxDist, totalOffset);
 
         var positionSetting = tm._tData.SelectMenu.StartLocation;
         switch (positionSetting)
@@ -1003,9 +1144,9 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
                 // here we need to check what the current offset between the manual positions are
                 var p1Pos = tm._tData.SelectMenu.PlayerDatas[0].ManualPosX;
                 var p2Pos = tm._tData.SelectMenu.PlayerDatas[1].ManualPosX;
-                var relativePos = p2Pos - p1Pos;
+                var relativePos = Math.Clamp(p2Pos - p1Pos - totalOffset, minDist, maxDist);
                 var type = _config.RelativePositionIsPreset
-                    ? RelativePositionType.FromValue(relativePos)
+                    ? RelativePositionType.FromValue(relativePos, minDist, maxDist, totalOffset)
                     : RelativePositionType.CustomRange;
                 if (type == RelativePositionType.CustomRange) _config.CustomRelativePosValue = relativePos;
                 CurrentRelativePosition = type;
@@ -1100,33 +1241,36 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             // in this case we know it must use custom logic
             tmMenuFunc.ChangeStartLocationType(app.EConfigInitLayout.MANUAL);
 
-            var relDist = CurrentRelativePosition.Value;
+            var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
+            var relDist = Math.Clamp(CurrentRelativePosition.ResolveValue(minDist, maxDist, totalOffset), minDist,
+                maxDist);
+            var manualDist = relDist + totalOffset;
 
             if (CurrentScreenPosition == ScreenPositionType.Right)
             {
-                tmMenuFunc.SetManualLocation(0, MaxScreenPos - relDist);
+                tmMenuFunc.SetManualLocation(0, MaxScreenPos - manualDist);
                 tmMenuFunc.SetManualLocation(1, MaxScreenPos);
             }
             else if (CurrentScreenPosition == ScreenPositionType.Left)
             {
                 tmMenuFunc.SetManualLocation(0, MinScreenPos);
-                tmMenuFunc.SetManualLocation(1, MinScreenPos + relDist);
+                tmMenuFunc.SetManualLocation(1, MinScreenPos + manualDist);
             }
             else
             {
                 var anchor = CurrentScreenPosition.Value;
-                var p1Pos = anchor - relDist / 2 - relDist % 2;
-                var p2Pos = anchor + relDist / 2;
+                var p1Pos = anchor - manualDist / 2 - manualDist % 2;
+                var p2Pos = anchor + manualDist / 2;
 
                 if (p1Pos < MinScreenPos)
                 {
                     p1Pos = MinScreenPos;
-                    p2Pos = MinScreenPos + relDist;
+                    p2Pos = MinScreenPos + manualDist;
                 }
                 else if (p2Pos > MaxScreenPos)
                 {
                     p2Pos = MaxScreenPos;
-                    p1Pos = MaxScreenPos - relDist;
+                    p1Pos = MaxScreenPos - manualDist;
                 }
 
                 tmMenuFunc.SetManualLocation(0, p1Pos);
@@ -1157,9 +1301,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
             }
             else
             {
-                var lower = Math.Clamp(_config.RelativeLowerBoundUnits, GetMinRelativeDistance(),
-                    GetMaxRelativeDistance());
-                var upper = Math.Clamp(_config.RelativeUpperBoundUnits, lower, GetMaxRelativeDistance());
+                var (minDist, maxDist, _) = GetRelativeDistanceMetrics();
+                var (lower, upper) = GetResolvedRelativeRandomizerBounds(minDist, maxDist);
                 _config.CustomRelativePosValue = Random.Shared.Next(lower, upper + 1);
                 CurrentRelativePosition = RelativePositionType.CustomRange;
             }
@@ -1189,31 +1332,34 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
 
     public readonly record struct RelativePositionType
     {
-        private RelativePositionType(int offsetValue, Guid guidValue)
+        private readonly bool _isFixedOriginDistance;
+        private readonly int _offsetValue;
+
+        private RelativePositionType(int offsetValue, Guid guidValue, bool isFixedOriginDistance = false)
         {
-            Value = offsetValue;
+            _offsetValue = offsetValue;
             GuidValue = guidValue;
+            _isFixedOriginDistance = isFixedOriginDistance;
         }
 
         public int Value
         {
             get
             {
-                if (GuidValue == RELATIVE_POS_CUSTOM) return _config.CustomRelativePosValue;
-                if (GuidValue == RELATIVE_POS_MAX_RANGE) return GetMaxRelativeDistance();
-                return GetMinRelativeDistance() + field;
+                var (minDist, maxDist, totalOffset) = GetRelativeDistanceMetrics();
+                return ResolveValue(minDist, maxDist, totalOffset);
             }
         }
 
         public Guid GuidValue { get; }
 
-        // Predefined fixed range offsets (added to GetMinRelativeDistance())
+        // Predefined edge-gap presets (added to minDist) and fixed origin-distance presets (minus totalOffset)
         public static RelativePositionType PointBlank => new(0, RELATIVE_POS_POINT_BLANK);
         public static RelativePositionType CloseRange => new(40, RELATIVE_POS_CLOSE_RANGE);
         public static RelativePositionType MidRange => new(100, RELATIVE_POS_MID_RANGE);
         public static RelativePositionType FarRange => new(140, RELATIVE_POS_FAR_RANGE);
-        public static RelativePositionType ThrowTech => new(212, RELATIVE_POS_THROW_TECH);
-        public static RelativePositionType Roundstart => new(230, RELATIVE_POS_ROUNDSTART);
+        public static RelativePositionType ThrowTech => new(282, RELATIVE_POS_THROW_TECH, true);
+        public static RelativePositionType Roundstart => new(300, RELATIVE_POS_ROUNDSTART, true);
         public static RelativePositionType ZoningRange => new(330, RELATIVE_POS_ZONING);
         public static RelativePositionType MaxRange => new(0, RELATIVE_POS_MAX_RANGE);
 
@@ -1221,19 +1367,27 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         public static RelativePositionType CustomRange =>
             new(0, RELATIVE_POS_CUSTOM);
 
-        public static RelativePositionType FromValue(int value)
+        public int ResolveValue(int minDist, int maxDist, int totalOffset)
         {
-            if (value == GetMaxRelativeDistance()) return MaxRange;
+            if (GuidValue == RELATIVE_POS_CUSTOM) return _config.CustomRelativePosValue;
+            if (GuidValue == RELATIVE_POS_MAX_RANGE) return maxDist;
+            if (_isFixedOriginDistance) return Math.Clamp(_offsetValue - totalOffset, minDist, maxDist);
+            return Math.Clamp(minDist + _offsetValue, minDist, maxDist);
+        }
 
-            var offset = value - GetMinRelativeDistance();
+        public static RelativePositionType FromValue(int value, int minDist, int maxDist, int totalOffset)
+        {
+            if (value == maxDist) return MaxRange;
+            if (value == ThrowTech.ResolveValue(minDist, maxDist, totalOffset)) return ThrowTech;
+            if (value == Roundstart.ResolveValue(minDist, maxDist, totalOffset)) return Roundstart;
+
+            var offset = value - minDist;
             return offset switch
             {
                 0 => PointBlank,
                 40 => CloseRange,
                 100 => MidRange,
                 140 => FarRange,
-                212 => ThrowTech,
-                230 => Roundstart,
                 330 => ZoningRange,
                 _ => CustomRange
             };
@@ -1319,8 +1473,8 @@ public partial class PositionalSettings : RandomizableFeatureBase<PositionalSett
         public bool RelativeRandomizerUsePresets { get; set; } = true;
         public int RelativeLowerBoundPreset { get; set; }
         public int RelativeUpperBoundPreset { get; set; } = RelativePresetOptions.Length - 1;
-        public int RelativeLowerBoundUnits { get; set; } = DefaultMinRelativeDistance;
-        public int RelativeUpperBoundUnits { get; set; } = DefaultMaxRelativeDistance;
+        public int RelativeLowerBoundEdgeGap { get; set; }
+        public int RelativeUpperBoundEdgeGap { get; set; } = DefaultMaxRelativeDistance - DefaultMinRelativeDistance;
 
         public bool EnabledScreenPositionRandomizer { get; set; }
         public bool ScreenRandomizerUsePresets { get; set; } = true;
