@@ -50,6 +50,12 @@
         <Reference Include="REFramework.NET.viacore">
             <HintPath>$(LibsPath)/managed/generated/REFramework.NET.viacore.dll</HintPath>
         </Reference>
+        <Reference Include="Hexa.Net.ImGui">
+            <HintPath>$(LibsPath)/managed/dependencies/Hexa.Net.ImGui.dll</HintPath>
+        </Reference>
+        <Reference Include="HexaGen.Runtime">
+            <HintPath>$(LibsPath)/managed/dependencies/HexaGen.Runtime.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup Condition="Exists('../Core/SF6PluginCore.csproj')">

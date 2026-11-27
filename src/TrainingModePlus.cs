@@ -13,6 +13,7 @@ using SF6_Plugin_Core;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_TMP.Modules;
+using SF6_TMP.Modules.HitboxViewer;
 using SF6_TMP.Modules.TrainingParametersAndRandomizer;
 
 // Core usings
@@ -43,6 +44,7 @@ public static class TrainingModePlus
 
         Modules.Add(GameSpeedPlus.Instance);
         Modules.Add(TrainingParametersAndRandomizer.Instance);
+        Modules.Add(HitboxViewerModule.Instance);
 
         GameSingletonManager.RegisterTrainingManager(
             OnTrainingManagerReady,
@@ -52,6 +54,7 @@ public static class TrainingModePlus
         CoreLifecycle.OnCoreUnloading += PluginExitPoint;
 
         SettingsTabManager.EnsureConfigBound();
+        HitboxViewer.EnsureConfigBound();
         ModConfig.Load();
     }
 
@@ -107,6 +110,8 @@ public static class TrainingModePlus
         try
         {
             CleanUpTrainingState();
+            ModConfig.Save();
+            HitboxViewer.ClearAllInstances();
             SettingsTabManager.Clear();
             ModConfig.Clear();
         }
@@ -183,9 +188,9 @@ public static class TrainingModePlus
         if (assemblyName.Name == "00_SF6PluginCore")
             // Search all AssemblyLoadContexts to find where REFramework loaded the Core plugin
             foreach (var alc in AssemblyLoadContext.All)
-            foreach (var loadedAssembly in alc.Assemblies)
-                if (loadedAssembly.GetName().Name == "00_SF6PluginCore")
-                    return loadedAssembly;
+                foreach (var loadedAssembly in alc.Assemblies)
+                    if (loadedAssembly.GetName().Name == "00_SF6PluginCore")
+                        return loadedAssembly;
 
         API.LogError(
             $"Failed to resolve assembly: {assemblyName.Name}. Ensure that the SF6_Plugin_Core is loaded and accessible.");
